@@ -67,6 +67,12 @@ os únicos lugares que sabem que os dados vêm do Supabase. Se um dia
 trocar de provedor de banco ou ganhar um backend próprio, só esses
 arquivos precisam mudar — o resto da UI (`app.js`) não muda.
 
+**Cache do CSS:** `index.html` carrega `styles.css?v=2` — esse `?v=`
+existe só pra forçar o navegador a buscar o arquivo de novo a cada
+mudança (sem isso, uma edição no CSS pode continuar em cache mesmo
+depois de um refresh normal). **Toda vez que mexer em `styles.css`,
+incremente esse número** (`?v=3`, `?v=4`, ...).
+
 ## Como rodar localmente
 
 Não há build step. É só servir a pasta como arquivos estáticos:
