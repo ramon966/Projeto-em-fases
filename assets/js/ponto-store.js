@@ -1,13 +1,13 @@
 // Data layer for the "Ponto" module (time-clock punches + per-employee work
-// schedules). Backed by Supabase (see supabase/schema_ponto.sql). Mirrors
-// the style of users-store.js — this is the only file that knows the
-// work_schedules/time_punches tables.
+// schedules). Backed by Supabase (see supabase/schema_ponto.sql) for
+// schedules/punches/corrections, and by window.CalendarData
+// (assets/js/calendar-data.js — static, not the database) for holidays and
+// birthdays. Mirrors the style of users-store.js — this is the only file
+// that knows where each piece of ponto data actually comes from.
 window.PontoStore = (function () {
   const SCHEDULES_TABLE = "work_schedules";
   const PUNCHES_TABLE = "time_punches";
   const CORRECTIONS_TABLE = "punch_corrections";
-  const HOLIDAYS_TABLE = "holidays";
-  const BIRTHDAYS_TABLE = "birthdays";
 
   // Ciclo de batidas do dia, nessa ordem fixa. O botão de bater o ponto
   // sempre pede a próxima da lista; depois de "saida" o ciclo só reinicia
@@ -171,54 +171,41 @@ window.PontoStore = (function () {
     return data.map(mapCorrection);
   }
 
-  function mapHoliday(row) {
-    return { date: row.date, name: row.name, type: row.type };
-  }
   function dateOnlyStr(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
 
+  // Feriados/recesso e aniversários vêm de window.CalendarData
+  // (assets/js/calendar-data.js) — dados estáticos fixos no front-end, não
+  // numa tabela do Supabase (mudam raramente, não vale a pena depender de
+  // rede/banco pra isso). Ainda assim expostos como funções — não como o
+  // array direto — pra quem consome (app.js) não precisar saber que a fonte
+  // mudou se um dia isso voltar a ser uma tabela.
+
   /** Holidays/recesso days within [start, end) (end exclusive), oldest
    * first — used to exclude non-working days from expectedMinutes. */
-  async function getHolidaysInRange(start, end) {
-    const { data, error } = await db()
-      .from(HOLIDAYS_TABLE)
-      .select("*")
-      .gte("date", dateOnlyStr(start))
-      .lt("date", dateOnlyStr(end))
-      .order("date", { ascending: true });
-    if (error) throw error;
-    return data.map(mapHoliday);
+  function getHolidaysInRange(start, end) {
+    const startStr = dateOnlyStr(start);
+    const endStr = dateOnlyStr(end);
+    return window.CalendarData.HOLIDAYS.filter((h) => h.date >= startStr && h.date < endStr).sort((a, b) =>
+      a.date < b.date ? -1 : a.date > b.date ? 1 : 0
+    );
   }
 
   /** All holidays/recesso days in a calendar year — feeds the Calendário
    * page. */
-  async function getHolidaysForYear(year) {
-    const { data, error } = await db()
-      .from(HOLIDAYS_TABLE)
-      .select("*")
-      .gte("date", `${year}-01-01`)
-      .lte("date", `${year}-12-31`)
-      .order("date", { ascending: true });
-    if (error) throw error;
-    return data.map(mapHoliday);
-  }
-
-  function mapBirthday(row) {
-    return { name: row.name, month: row.month, day: row.day };
+  function getHolidaysForYear(year) {
+    const prefix = String(year);
+    return window.CalendarData.HOLIDAYS.filter((h) => h.date.startsWith(prefix)).sort((a, b) =>
+      a.date < b.date ? -1 : a.date > b.date ? 1 : 0
+    );
   }
 
   /** Every team birthday (month/day only — no year, they repeat every
    * year). Purely informational for the Calendário page; never touches
    * expectedMinutes (that's holidays only). */
-  async function getBirthdays() {
-    const { data, error } = await db()
-      .from(BIRTHDAYS_TABLE)
-      .select("*")
-      .order("month", { ascending: true })
-      .order("day", { ascending: true });
-    if (error) throw error;
-    return data.map(mapBirthday);
+  function getBirthdays() {
+    return window.CalendarData.BIRTHDAYS.slice().sort((a, b) => a.month - b.month || a.day - b.day);
   }
 
   /** What the *next* punch should be, given the last one registered. Starts
