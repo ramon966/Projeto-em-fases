@@ -466,6 +466,7 @@ body {
   box-shadow: var(--shadow); padding: 22px 24px;
   display: flex; flex-direction: column; gap: 18px;
 }
+.ponto-card[hidden] { display: none; }
 .ponto-punch-btn { font-size: 15px; padding: 14px 18px; }
 .ponto-punch-btn svg { width: 16px; height: 16px; }
 
@@ -498,6 +499,7 @@ body {
 .ponto-correct-btn { align-self: flex-start; }
 
 .ponto-admin-stack { display: flex; flex-direction: column; gap: 20px; }
+.ponto-admin-stack[hidden] { display: none; }
 
 .ponto-corrections-list { display: flex; flex-direction: column; gap: 10px; max-height: 340px; overflow-y: auto; }
 .ponto-correction-row { padding: 10px 12px; border-radius: 10px; background: var(--panel-2); }
