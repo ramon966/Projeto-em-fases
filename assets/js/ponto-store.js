@@ -5,6 +5,9 @@
 window.PontoStore = (function () {
   const SCHEDULES_TABLE = "work_schedules";
   const PUNCHES_TABLE = "time_punches";
+  const CORRECTIONS_TABLE = "punch_corrections";
+  const HOLIDAYS_TABLE = "holidays";
+  const BIRTHDAYS_TABLE = "birthdays";
 
   // Ciclo de batidas do dia, nessa ordem fixa. O botão de bater o ponto
   // sempre pede a próxima da lista; depois de "saida" o ciclo só reinicia
@@ -122,6 +125,102 @@ window.PontoStore = (function () {
     if (error) throw error;
   }
 
+  /** All punches for a user within [start, end) (end exclusive), oldest
+   * first — used by the admin's monthly spreadsheet, which needs a whole
+   * range at once instead of day by day. */
+  async function getPunchesForRange(userId, start, end) {
+    const { data, error } = await db()
+      .from(PUNCHES_TABLE)
+      .select("*")
+      .eq("user_id", userId)
+      .gte("punched_at", start.toISOString())
+      .lt("punched_at", end.toISOString())
+      .order("punched_at", { ascending: true });
+    if (error) throw error;
+    return data.map(mapPunch);
+  }
+
+  function mapCorrection(row) {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      action: row.action,
+      punchType: row.punch_type,
+      previousTime: row.previous_time,
+      newTime: row.new_time,
+      justification: row.justification,
+      createdAt: row.created_at,
+    };
+  }
+
+  /** Logs a self-correction made by a non-admin employee, with the
+   * justification the admin will review. Admin corrections (via the
+   * monthly spreadsheet) don't go through here — they don't require one. */
+  async function addCorrection({ userId, action, punchType, previousTime, newTime, justification }) {
+    const { error } = await db()
+      .from(CORRECTIONS_TABLE)
+      .insert({ user_id: userId, action, punch_type: punchType, previous_time: previousTime, new_time: newTime, justification });
+    if (error) throw error;
+  }
+
+  /** All correction justifications, most recent first — feeds the admin's
+   * "Justificativas recebidas" panel. */
+  async function getCorrections() {
+    const { data, error } = await db().from(CORRECTIONS_TABLE).select("*").order("created_at", { ascending: false });
+    if (error) throw error;
+    return data.map(mapCorrection);
+  }
+
+  function mapHoliday(row) {
+    return { date: row.date, name: row.name, type: row.type };
+  }
+  function dateOnlyStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  /** Holidays/recesso days within [start, end) (end exclusive), oldest
+   * first — used to exclude non-working days from expectedMinutes. */
+  async function getHolidaysInRange(start, end) {
+    const { data, error } = await db()
+      .from(HOLIDAYS_TABLE)
+      .select("*")
+      .gte("date", dateOnlyStr(start))
+      .lt("date", dateOnlyStr(end))
+      .order("date", { ascending: true });
+    if (error) throw error;
+    return data.map(mapHoliday);
+  }
+
+  /** All holidays/recesso days in a calendar year — feeds the Calendário
+   * page. */
+  async function getHolidaysForYear(year) {
+    const { data, error } = await db()
+      .from(HOLIDAYS_TABLE)
+      .select("*")
+      .gte("date", `${year}-01-01`)
+      .lte("date", `${year}-12-31`)
+      .order("date", { ascending: true });
+    if (error) throw error;
+    return data.map(mapHoliday);
+  }
+
+  function mapBirthday(row) {
+    return { name: row.name, month: row.month, day: row.day };
+  }
+
+  /** Every team birthday (month/day only — no year, they repeat every
+   * year). Purely informational for the Calendário page; never touches
+   * expectedMinutes (that's holidays only). */
+  async function getBirthdays() {
+    const { data, error } = await db()
+      .from(BIRTHDAYS_TABLE)
+      .select("*")
+      .order("month", { ascending: true })
+      .order("day", { ascending: true });
+    if (error) throw error;
+    return data.map(mapBirthday);
+  }
+
   /** What the *next* punch should be, given the last one registered. Starts
    * a fresh "entrada" if there's no last punch, or if the last one was on a
    * previous day (a day that ended without a "saida" doesn't trap the next
@@ -186,15 +285,19 @@ window.PontoStore = (function () {
 
   /** Expected worked minutes for every scheduled weekday from `since`
    * (inclusive) through today (inclusive) — i.e. the target for the month
-   * so far, not the whole month ahead. */
-  function expectedMinutes(schedule, since) {
+   * so far, not the whole month ahead. `holidayDates` (a Set of "YYYY-MM-DD"
+   * strings, optional) excludes feriados/recesso even when they fall on a
+   * day the schedule would otherwise expect work. */
+  function expectedMinutes(schedule, since, holidayDates) {
+    const holidays = holidayDates || new Set();
     const now = new Date();
     const day = new Date(since.getFullYear(), since.getMonth(), since.getDate());
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     let workDays = 0;
     while (day <= today) {
       const iso = day.getDay() === 0 ? 7 : day.getDay(); // JS: 0=domingo..6=sábado → ISO: 1=segunda..7=domingo
-      if (schedule.weekdays.includes(iso)) workDays++;
+      const dateKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+      if (schedule.weekdays.includes(iso) && !holidays.has(dateKey)) workDays++;
       day.setDate(day.getDate() + 1);
     }
     return Math.round(workDays * schedule.hoursPerDay * 60);
@@ -217,8 +320,14 @@ window.PontoStore = (function () {
     getLastPunch,
     getPunchesSince,
     getPunchesForDay,
+    getPunchesForRange,
     updatePunch,
     deletePunch,
+    addCorrection,
+    getCorrections,
+    getHolidaysInRange,
+    getHolidaysForYear,
+    getBirthdays,
     nextPunchType,
     registerPunch,
     sumWorkedMinutes,

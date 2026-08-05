@@ -263,12 +263,13 @@ body {
 /* shared field styles */
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); font-weight: 700; }
-.field input, .field select {
+.field input, .field select, .field textarea {
   font: inherit; font-size: 13.5px; padding: 10px 12px; border-radius: 9px;
   border: 1px solid var(--border); background: var(--panel-2); color: var(--text); width: 100%;
 }
-.field input::placeholder { color: var(--text-faint); }
-.field input:focus-visible, .field select:focus-visible { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.field textarea { resize: vertical; }
+.field input::placeholder, .field textarea::placeholder { color: var(--text-faint); }
+.field input:focus-visible, .field select:focus-visible, .field textarea:focus-visible { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
 
 .btn {
   font: inherit; font-size: 13.5px; font-weight: 700; padding: 10px 16px; border-radius: 9px;
@@ -496,9 +497,20 @@ body {
 
 .ponto-correct-btn { align-self: flex-start; }
 
+.ponto-admin-stack { display: flex; flex-direction: column; gap: 20px; }
+
+.ponto-corrections-list { display: flex; flex-direction: column; gap: 10px; max-height: 340px; overflow-y: auto; }
+.ponto-correction-row { padding: 10px 12px; border-radius: 10px; background: var(--panel-2); }
+.ponto-correction-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.ponto-correction-user { font-size: 13px; font-weight: 700; }
+.ponto-correction-when { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+.ponto-correction-change { font-size: 12.5px; color: var(--text-muted); margin-bottom: 4px; }
+.ponto-correction-text { font-size: 12.5px; color: var(--text); font-style: italic; }
+
 @media (min-width: 860px) {
   .ponto-layout { flex-direction: row; align-items: flex-start; max-width: none; }
-  .ponto-layout .ponto-card { flex: 1 1 0; }
+  .ponto-layout > .ponto-card,
+  .ponto-layout > .ponto-admin-stack { flex: 1 1 0; min-width: 0; }
 }
 
 /* --- ponto: modal de correção manual (mais largo que os demais, por causa
@@ -520,6 +532,57 @@ body {
 .punch-edit-add { background: none; border: 1px dashed var(--border-strong); }
 .punch-edit-add .btn { flex: none; padding: 7px 12px; font-size: 12.5px; }
 .punch-edit-add .btn svg { width: 12px; height: 12px; }
+
+/* --- ponto: planilha mensal (admin), estilo Excel — uma linha por dia do
+   mês corrente de verdade (28-31 dias conforme o mês/ano) --- */
+.punch-sheet-panel { max-width: 940px; width: 100%; }
+.punch-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.punch-sheet-nav { display: flex; gap: 2px; flex: none; }
+.punch-sheet-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+.punch-sheet-table { width: 100%; border-collapse: collapse; font-size: 12.5px; white-space: nowrap; }
+.punch-sheet-table th {
+  text-align: left; padding: 8px 10px; background: var(--panel-2); color: var(--text-muted);
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;
+  border-bottom: 1px solid var(--border);
+}
+.punch-sheet-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.punch-sheet-table tr:last-child td { border-bottom: none; }
+.punch-sheet-row.off-day { opacity: 0.5; }
+.punch-sheet-row.holiday { background: var(--danger-soft); opacity: 1; }
+.punch-sheet-row.holiday.today { background: var(--danger-soft); }
+.punch-sheet-row.today { background: var(--accent-soft); }
+.punch-sheet-day { font-weight: 700; }
+.punch-sheet-time {
+  font: inherit; font-size: 12px; padding: 5px 6px; border-radius: 6px; width: 84px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
+}
+.punch-sheet-time:focus-visible { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.punch-sheet-total { font-weight: 700; }
+.punch-sheet-diff.positive { color: var(--success); font-weight: 700; }
+.punch-sheet-diff.negative { color: var(--danger); font-weight: 700; }
+
+/* --- calendário: feriados e recesso --- */
+.calendar-layout { display: flex; flex-direction: column; gap: 20px; }
+.calendar-list { display: flex; flex-direction: column; }
+.calendar-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+.calendar-row:first-child { border-top: none; }
+.calendar-date { font-size: 12.5px; font-weight: 700; color: var(--text); flex: 0 0 130px; }
+.calendar-name { font-size: 13px; color: var(--text); flex: 1 1 160px; }
+.calendar-badge {
+  font-size: 10.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: 0.04em; flex: none;
+}
+.calendar-badge.feriado { background: var(--accent-soft); color: var(--accent); }
+.calendar-badge.recesso { background: var(--panel-2); color: var(--text-muted); border: 1px solid var(--border-strong); }
+.calendar-badge.aniversario { background: none; color: var(--accent); border: 1px dashed var(--border-strong); }
+
+@media (min-width: 860px) {
+  .calendar-layout { flex-direction: row; align-items: flex-start; }
+  .calendar-layout .ponto-card { flex: 1 1 0; min-width: 0; }
+}
 
 footer { text-align: center; margin-top: 34px; font-size: 11px; color: var(--text-faint); letter-spacing: 0.02em; }
 

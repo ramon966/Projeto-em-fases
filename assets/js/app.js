@@ -10,8 +10,14 @@
     getLastPunch,
     getPunchesSince,
     getPunchesForDay,
+    getPunchesForRange,
     updatePunch,
     deletePunch,
+    addCorrection,
+    getCorrections,
+    getHolidaysInRange,
+    getHolidaysForYear,
+    getBirthdays,
     nextPunchType,
     registerPunch,
     sumWorkedMinutes,
@@ -272,6 +278,7 @@
     if (!confirmOverlay.hidden) closeDeleteConfirm();
     if (!scheduleOverlay.hidden) closeScheduleModal();
     if (!punchEditOverlay.hidden) closePunchEditModal();
+    if (!punchSheetOverlay.hidden) closePunchSheetModal();
   });
 
   mSave.addEventListener("click", async () => {
@@ -327,10 +334,14 @@
 
   function applyPermissions() {
     openCreateBtn.hidden = !(currentUser && currentUser.isAdmin);
-    // Defensive default: the Ponto page itself repopulates this panel with
-    // renderScheduleList() when visited, but this keeps a stale admin panel
-    // from flashing after logout/login as a different (non-admin) user.
-    document.getElementById("ponto-admin-panel").hidden = !(currentUser && currentUser.isAdmin);
+    const isAdmin = !!(currentUser && currentUser.isAdmin);
+    // Defensive default: the Ponto page itself repopulates these panels with
+    // renderScheduleList()/renderCorrectionsList() when visited, but this
+    // keeps the wrong card from flashing after logout/login as a different
+    // user. Admin doesn't punch a clock — só gerencia — so the personal
+    // card and the admin stack are always mutually exclusive.
+    document.getElementById("ponto-personal-card").hidden = isAdmin;
+    document.getElementById("ponto-admin-stack").hidden = !isAdmin;
     renderTopbarUser();
   }
 
@@ -416,6 +427,7 @@
     usuarios: document.getElementById("page-usuarios"),
     dashboard: document.getElementById("page-dashboard"),
     ponto: document.getElementById("page-ponto"),
+    calendario: document.getElementById("page-calendario"),
   };
   function showPage(name) {
     Object.keys(pages).forEach((key) => {
@@ -431,8 +443,15 @@
       });
       showPage(item.dataset.nav);
       if (item.dataset.nav === "ponto") {
-        refreshPontoSummary();
-        renderScheduleList();
+        if (currentUser && currentUser.isAdmin) {
+          renderScheduleList();
+          renderCorrectionsList();
+        } else {
+          refreshPontoSummary();
+        }
+      }
+      if (item.dataset.nav === "calendario") {
+        renderCalendarPage();
       }
     });
   });
@@ -444,9 +463,10 @@
   const pontoLastPunchEl = document.getElementById("ponto-last-punch");
   const pontoWorkedHoursEl = document.getElementById("ponto-worked-hours");
   const pontoHourBankEl = document.getElementById("ponto-hour-bank");
-  const pontoAdminPanel = document.getElementById("ponto-admin-panel");
   const pontoScheduleList = document.getElementById("ponto-schedule-list");
+  const pontoCorrectionsList = document.getElementById("ponto-corrections-list");
 
+  const PUNCH_TYPES = ["entrada", "saida_almoco", "volta_almoco", "saida"];
   const PUNCH_LABELS = {
     entrada: "Bater entrada",
     saida_almoco: "Bater saída (almoço)",
@@ -488,13 +508,17 @@
         ? `${PUNCH_PAST_LABELS[pontoLastPunchData.type]} às ${formatDateTime(pontoLastPunchData.punchedAt)}`
         : "Nenhuma batida ainda";
 
-      const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-      const [schedule, punches] = await Promise.all([
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const [schedule, punches, holidays] = await Promise.all([
         getSchedule(currentUser.id),
         getPunchesSince(currentUser.id, monthStart),
+        getHolidaysInRange(monthStart, tomorrow),
       ]);
+      const holidayDates = new Set(holidays.map((h) => h.date));
       const workedMinutes = sumWorkedMinutes(punches);
-      const expected = expectedMinutes(schedule, monthStart);
+      const expected = expectedMinutes(schedule, monthStart, holidayDates);
       const balance = workedMinutes - expected;
 
       pontoWorkedHoursEl.textContent = `${formatMinutes(workedMinutes)} de ${formatMinutes(expected)}`;
@@ -537,13 +561,10 @@
   let scheduleSelectedDays = [];
 
   /** Renders the admin-only list of employees + their configured schedule.
-   * A no-op (panel stays hidden) for non-admins. */
+   * A no-op for non-admins — applyPermissions() already keeps the whole
+   * admin stack hidden for them. */
   async function renderScheduleList() {
-    if (!currentUser || !currentUser.isAdmin) {
-      pontoAdminPanel.hidden = true;
-      return;
-    }
-    pontoAdminPanel.hidden = false;
+    if (!currentUser || !currentUser.isAdmin) return;
     pontoScheduleList.innerHTML = '<p class="empty">Carregando…</p>';
     try {
       const schedules = await getAllSchedules();
@@ -566,7 +587,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
           </button>`;
         row.querySelector('[data-action="edit-schedule"]').addEventListener("click", () => openScheduleModal(u, schedule));
-        row.querySelector('[data-action="edit-punch"]').addEventListener("click", () => openPunchEditModal(u));
+        row.querySelector('[data-action="edit-punch"]').addEventListener("click", () => openPunchSheetModal(u));
         pontoScheduleList.appendChild(row);
       });
     } catch (err) {
@@ -632,24 +653,20 @@
     }
   });
 
-  // --- ponto: correção manual (adicionar/editar/excluir batidas de um dia).
-  // Regras de permissão: admin corrige qualquer colaborador (seletor visível);
-  // um colaborador comum só corrige as próprias batidas (seletor escondido,
-  // alvo travado no currentUser). ---
+  // --- ponto: correção manual do PRÓPRIO ponto (colaborador comum). Exige
+  // justificativa — o admin corrige qualquer um sem justificativa, pela
+  // planilha mensal (seção seguinte), então esse modal só existe pra quem
+  // não é admin corrigir a si mesmo. ---
   const pontoCorrectBtn = document.getElementById("ponto-correct-btn");
   const punchEditOverlay = document.getElementById("punch-edit-overlay");
-  const punchEditTitle = document.getElementById("punch-edit-title");
-  const punchEditUserField = document.getElementById("punch-edit-user-field");
-  const punchEditUserSelect = document.getElementById("punch-edit-user");
   const punchEditDateInput = document.getElementById("punch-edit-date");
   const punchEditList = document.getElementById("punch-edit-list");
   const punchAddType = document.getElementById("punch-add-type");
   const punchAddTime = document.getElementById("punch-add-time");
   const punchAddBtn = document.getElementById("punch-add-btn");
+  const punchEditJustification = document.getElementById("punch-edit-justification");
   const punchEditError = document.getElementById("punch-edit-error");
   const punchEditCloseBtn = document.getElementById("punch-edit-close");
-
-  let punchEditTargetUserId = null;
 
   function todayInputValue() {
     const d = new Date();
@@ -661,35 +678,33 @@
     const p = (n) => String(n).padStart(2, "0");
     return `${p(d.getHours())}:${p(d.getMinutes())}`;
   }
-  /** Builds an ISO timestamp from the modal's separate date (YYYY-MM-DD) and
-   * time (HH:MM) inputs, read as local time — matches how punches are
-   * displayed everywhere else in the UI. */
+  /** Builds an ISO timestamp from a date (YYYY-MM-DD) and a time (HH:MM)
+   * read as local time — matches how punches are displayed everywhere
+   * else in the UI. */
   function combineDateAndTime(dateStr, timeStr) {
     const [y, m, d] = dateStr.split("-").map(Number);
     const [hh, mm] = timeStr.split(":").map(Number);
     return new Date(y, m - 1, d, hh, mm, 0, 0).toISOString();
   }
 
-  function openPunchEditModal(user) {
-    const isAdmin = !!(currentUser && currentUser.isAdmin);
-    punchEditTargetUserId = isAdmin ? user.id : currentUser.id;
+  /** Reads and validates the shared justification field. Returns the
+   * trimmed text, or null (with an error message shown) if it's empty. */
+  function requireJustification() {
+    const text = punchEditJustification.value.trim();
+    if (!text) {
+      punchEditError.textContent = "Escreva uma justificativa antes de salvar.";
+      return null;
+    }
+    return text;
+  }
+
+  function openPunchEditModal() {
+    if (!currentUser) return;
     punchEditError.textContent = "";
+    punchEditJustification.value = "";
     punchEditDateInput.value = todayInputValue();
     punchAddType.value = "entrada";
     punchAddTime.value = "";
-
-    if (isAdmin) {
-      punchEditUserField.hidden = false;
-      punchEditUserSelect.innerHTML = users
-        .map((u) => `<option value="${u.id}">${escapeHtml(u.name)}${u.id === currentUser.id ? " (você)" : ""}</option>`)
-        .join("");
-      punchEditUserSelect.value = String(punchEditTargetUserId);
-      punchEditTitle.textContent = "Corrigir ponto";
-    } else {
-      punchEditUserField.hidden = true;
-      punchEditTitle.textContent = "Corrigir meu ponto";
-    }
-
     punchEditOverlay.hidden = false;
     renderPunchEditList();
   }
@@ -697,12 +712,12 @@
     punchEditOverlay.hidden = true;
   }
 
-  /** Loads and renders the punches for the currently selected user + date. */
+  /** Loads and renders the current user's punches for the selected date. */
   async function renderPunchEditList() {
     punchEditList.innerHTML = '<p class="empty">Carregando…</p>';
     try {
       const [y, m, d] = punchEditDateInput.value.split("-").map(Number);
-      const punches = await getPunchesForDay(punchEditTargetUserId, new Date(y, m - 1, d));
+      const punches = await getPunchesForDay(currentUser.id, new Date(y, m - 1, d));
       if (punches.length === 0) {
         punchEditList.innerHTML = '<p class="empty">Nenhuma batida nesse dia.</p>';
         return;
@@ -727,8 +742,8 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           </button>`;
         row.querySelector(".punch-row-type").value = p.type;
-        row.querySelector('[data-action="save"]').addEventListener("click", () => savePunchRow(row, p.id));
-        row.querySelector('[data-action="delete"]').addEventListener("click", () => deletePunchRow(row, p.id));
+        row.querySelector('[data-action="save"]').addEventListener("click", () => savePunchRow(row, p));
+        row.querySelector('[data-action="delete"]').addEventListener("click", () => deletePunchRow(row, p));
         punchEditList.appendChild(row);
       });
     } catch (err) {
@@ -737,24 +752,33 @@
     }
   }
 
-  /** Reloads the day's list and, if the corrected user is whoever's logged
-   * in, refreshes their punch button/hour bank too. */
+  /** Reloads the day's list and refreshes the punch button/hour bank. */
   async function afterPunchEditChange() {
     await renderPunchEditList();
-    if (currentUser && punchEditTargetUserId === currentUser.id) await refreshPontoSummary();
+    await refreshPontoSummary();
   }
 
-  async function savePunchRow(row, id) {
+  async function savePunchRow(row, punch) {
     const type = row.querySelector(".punch-row-type").value;
     const time = row.querySelector(".punch-row-time").value;
     if (!time) {
       punchEditError.textContent = "Informe um horário válido.";
       return;
     }
+    const justification = requireJustification();
+    if (!justification) return;
     punchEditError.textContent = "";
     try {
       const punchedAt = combineDateAndTime(punchEditDateInput.value, time);
-      await updatePunch(id, { type, punchedAt });
+      await updatePunch(punch.id, { type, punchedAt });
+      await addCorrection({
+        userId: currentUser.id,
+        action: "editada",
+        punchType: type,
+        previousTime: punch.punchedAt,
+        newTime: punchedAt,
+        justification,
+      });
       await afterPunchEditChange();
     } catch (err) {
       console.error("Falha ao salvar batida:", err);
@@ -762,15 +786,24 @@
     }
   }
 
-  async function deletePunchRow(row, id) {
-    // Um confirm() nativo é suficiente aqui — é uma correção pontual de uma
-    // linha dentro de um modal que já é, em si, uma ação restrita (admin ou
-    // dono do ponto); não parece justificar mais um modal de confirmação
-    // aninhado igual ao de exclusão de usuário.
+  async function deletePunchRow(row, punch) {
+    const justification = requireJustification();
+    if (!justification) return;
+    // Um confirm() nativo é suficiente aqui — é uma correção pontual dentro
+    // de um modal que já exige justificativa escrita; não parece justificar
+    // mais um modal de confirmação aninhado igual ao de exclusão de usuário.
     if (!confirm("Excluir essa batida? Essa ação não pode ser desfeita.")) return;
     punchEditError.textContent = "";
     try {
-      await deletePunch(id);
+      await deletePunch(punch.id);
+      await addCorrection({
+        userId: currentUser.id,
+        action: "excluida",
+        punchType: punch.type,
+        previousTime: punch.punchedAt,
+        newTime: null,
+        justification,
+      });
       await afterPunchEditChange();
     } catch (err) {
       console.error("Falha ao excluir batida:", err);
@@ -778,26 +811,29 @@
     }
   }
 
-  pontoCorrectBtn.addEventListener("click", () => {
-    if (!currentUser) return;
-    openPunchEditModal(currentUser);
-  });
+  pontoCorrectBtn.addEventListener("click", openPunchEditModal);
   punchEditDateInput.addEventListener("change", renderPunchEditList);
-  punchEditUserSelect.addEventListener("change", () => {
-    punchEditTargetUserId = Number(punchEditUserSelect.value);
-    renderPunchEditList();
-  });
   punchAddBtn.addEventListener("click", async () => {
     const time = punchAddTime.value;
     if (!time) {
       punchEditError.textContent = "Informe um horário para a nova batida.";
       return;
     }
+    const justification = requireJustification();
+    if (!justification) return;
     punchEditError.textContent = "";
     punchAddBtn.disabled = true;
     try {
       const punchedAt = combineDateAndTime(punchEditDateInput.value, time);
-      await registerPunch(punchEditTargetUserId, punchAddType.value, punchedAt);
+      await registerPunch(currentUser.id, punchAddType.value, punchedAt);
+      await addCorrection({
+        userId: currentUser.id,
+        action: "adicionada",
+        punchType: punchAddType.value,
+        previousTime: null,
+        newTime: punchedAt,
+        justification,
+      });
       punchAddTime.value = "";
       await afterPunchEditChange();
     } catch (err) {
@@ -811,6 +847,289 @@
   punchEditOverlay.addEventListener("click", (e) => {
     if (e.target === punchEditOverlay) closePunchEditModal();
   });
+
+  // --- ponto: justificativas recebidas (admin) — lista tudo que os
+  // colaboradores registraram ao corrigir o próprio ponto. ---
+  const ACTION_LABELS = { adicionada: "Adicionou", editada: "Editou", excluida: "Excluiu" };
+
+  function formatCorrectionChange(c) {
+    const typeLabel = PUNCH_PAST_LABELS[c.punchType];
+    if (c.action === "adicionada") return `${typeLabel} às ${formatDateTime(c.newTime)}`;
+    if (c.action === "excluida") return `${typeLabel} que estava às ${formatDateTime(c.previousTime)}`;
+    return `${typeLabel}: ${formatDateTime(c.previousTime)} → ${formatDateTime(c.newTime)}`;
+  }
+
+  /** Renders every self-correction justification, most recent first. A
+   * no-op for non-admins — applyPermissions() keeps the panel hidden. */
+  async function renderCorrectionsList() {
+    if (!currentUser || !currentUser.isAdmin) return;
+    pontoCorrectionsList.innerHTML = '<p class="empty">Carregando…</p>';
+    try {
+      const corrections = await getCorrections();
+      if (corrections.length === 0) {
+        pontoCorrectionsList.innerHTML = '<p class="empty">Nenhuma justificativa enviada ainda.</p>';
+        return;
+      }
+      pontoCorrectionsList.innerHTML = "";
+      corrections.forEach((c) => {
+        const user = users.find((u) => u.id === c.userId);
+        const row = document.createElement("div");
+        row.className = "ponto-correction-row";
+        row.innerHTML = `
+          <div class="ponto-correction-head">
+            <span class="ponto-correction-user">${escapeHtml(user ? user.name : "Ex-colaborador")}</span>
+            <span class="ponto-correction-when">${formatDateTime(c.createdAt)}</span>
+          </div>
+          <div class="ponto-correction-change">${escapeHtml(`${ACTION_LABELS[c.action]} ${formatCorrectionChange(c)}`)}</div>
+          <div class="ponto-correction-text">"${escapeHtml(c.justification)}"</div>`;
+        pontoCorrectionsList.appendChild(row);
+      });
+    } catch (err) {
+      console.error("Falha ao carregar justificativas:", err);
+      pontoCorrectionsList.innerHTML = '<p class="empty">Não foi possível carregar as justificativas.</p>';
+    }
+  }
+
+  // --- ponto: planilha mensal (admin) — corrige qualquer colaborador sem
+  // justificativa, um mês inteiro de cada vez, seguindo o calendário
+  // corrente de verdade (28-31 dias conforme o mês/ano). ---
+  const punchSheetOverlay = document.getElementById("punch-sheet-overlay");
+  const punchSheetTitle = document.getElementById("punch-sheet-title");
+  const punchSheetBody = document.getElementById("punch-sheet-body");
+  const punchSheetError = document.getElementById("punch-sheet-error");
+  const punchSheetPrevBtn = document.getElementById("punch-sheet-prev");
+  const punchSheetNextBtn = document.getElementById("punch-sheet-next");
+  const punchSheetCloseBtn = document.getElementById("punch-sheet-close");
+
+  const MONTH_NAMES = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+  ];
+  // Domingo primeiro, igual ao calendário usado no Brasil; casa com
+  // Date#getDay() (0 = domingo ... 6 = sábado).
+  const WEEKDAY_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+  let sheetTargetUser = null;
+  let sheetYear = null;
+  let sheetMonth = null; // 0-based, convenção do JS Date
+
+  function openPunchSheetModal(user) {
+    sheetTargetUser = user;
+    const now = new Date();
+    sheetYear = now.getFullYear();
+    sheetMonth = now.getMonth();
+    punchSheetError.textContent = "";
+    punchSheetOverlay.hidden = false;
+    renderPunchSheet();
+  }
+  function closePunchSheetModal() {
+    punchSheetOverlay.hidden = true;
+    sheetTargetUser = null;
+  }
+  function changeSheetMonth(delta) {
+    const d = new Date(sheetYear, sheetMonth + delta, 1);
+    sheetYear = d.getFullYear();
+    sheetMonth = d.getMonth();
+    renderPunchSheet();
+  }
+
+  /** Renders one row per day of the selected month, using the real number
+   * of days for that month/year (28-31) — the same Gregorian calendar used
+   * in Brazil, not a fixed 30-day approximation. */
+  async function renderPunchSheet() {
+    punchSheetTitle.textContent = `${sheetTargetUser.name} — ${MONTH_NAMES[sheetMonth]} de ${sheetYear}`;
+    punchSheetError.textContent = "";
+    punchSheetBody.innerHTML = '<tr><td colspan="8" class="empty">Carregando…</td></tr>';
+    try {
+      const monthStart = new Date(sheetYear, sheetMonth, 1);
+      const monthEnd = new Date(sheetYear, sheetMonth + 1, 1); // exclusivo
+      const totalDays = new Date(sheetYear, sheetMonth + 1, 0).getDate();
+
+      const [schedule, punches, holidays] = await Promise.all([
+        getSchedule(sheetTargetUser.id),
+        getPunchesForRange(sheetTargetUser.id, monthStart, monthEnd),
+        getHolidaysInRange(monthStart, monthEnd),
+      ]);
+      const holidayByDate = {};
+      holidays.forEach((h) => {
+        holidayByDate[h.date] = h;
+      });
+
+      // Agrupa as batidas por dia e por tipo. Assume no máximo uma batida
+      // de cada tipo por dia — se sobrar uma duplicata de dados antigos,
+      // esta grade só edita a primeira encontrada e ignora o resto (não é
+      // o uso normal, é só pra não travar a UI numa inconsistência rara).
+      const byDay = {};
+      punches.forEach((p) => {
+        const d = new Date(p.punchedAt);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        if (!byDay[key]) byDay[key] = {};
+        if (!byDay[key][p.type]) byDay[key][p.type] = p;
+      });
+
+      punchSheetBody.innerHTML = "";
+      const today = new Date();
+      for (let day = 1; day <= totalDays; day++) {
+        const date = new Date(sheetYear, sheetMonth, day);
+        const key = `${sheetYear}-${String(sheetMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const dayPunches = byDay[key] || {};
+        const holiday = holidayByDate[key];
+        const iso = date.getDay() === 0 ? 7 : date.getDay();
+        const isWorkingDay = schedule.weekdays.includes(iso) && !holiday;
+        const worked = sumWorkedMinutes(
+          Object.values(dayPunches).sort((a, b) => new Date(a.punchedAt) - new Date(b.punchedAt))
+        );
+        const expected = isWorkingDay ? Math.round(schedule.hoursPerDay * 60) : 0;
+        const diff = worked - expected;
+        const isToday = date.toDateString() === today.toDateString();
+
+        const row = document.createElement("tr");
+        row.className =
+          "punch-sheet-row" + (isWorkingDay ? "" : " off-day") + (isToday ? " today" : "") + (holiday ? " holiday" : "");
+        row.innerHTML = `
+          <td class="punch-sheet-day"${holiday ? ` title="${escapeHtml(holiday.name)}"` : ""}>${WEEKDAY_SHORT[date.getDay()]} ${String(day).padStart(2, "0")}${holiday ? " 🔸" : ""}</td>
+          ${PUNCH_TYPES.map(
+            (type) =>
+              `<td><input type="time" class="punch-sheet-time" data-type="${type}" value="${dayPunches[type] ? toTimeInputValue(dayPunches[type].punchedAt) : ""}" /></td>`
+          ).join("")}
+          <td class="punch-sheet-total">${formatMinutes(worked)}</td>
+          <td class="punch-sheet-expected">${isWorkingDay ? formatMinutes(expected) : "—"}</td>
+          <td class="punch-sheet-diff ${diff >= 0 ? "positive" : "negative"}">${isWorkingDay ? (diff >= 0 ? "+" : "") + formatMinutes(diff) : "—"}</td>
+        `;
+        row.querySelectorAll(".punch-sheet-time").forEach((input) => {
+          input.addEventListener("change", () => handleSheetCellChange(date, input, dayPunches));
+        });
+        punchSheetBody.appendChild(row);
+      }
+    } catch (err) {
+      console.error("Falha ao carregar planilha de ponto:", err);
+      punchSheetBody.innerHTML = '<tr><td colspan="8" class="empty">Não foi possível carregar a planilha.</td></tr>';
+    }
+  }
+
+  /** Applies one cell edit (create/update/delete depending on the previous
+   * and new values) then reloads the whole sheet to keep totals correct. */
+  async function handleSheetCellChange(date, input, dayPunchesBeforeEdit) {
+    const type = input.dataset.type;
+    const time = input.value;
+    const existing = dayPunchesBeforeEdit[type];
+    input.disabled = true;
+    punchSheetError.textContent = "";
+    try {
+      if (!time) {
+        if (existing) await deletePunch(existing.id);
+      } else {
+        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+        const punchedAt = combineDateAndTime(dateStr, time);
+        if (existing) {
+          await updatePunch(existing.id, { type, punchedAt });
+        } else {
+          await registerPunch(sheetTargetUser.id, type, punchedAt);
+        }
+      }
+      await renderPunchSheet();
+      if (currentUser && sheetTargetUser.id === currentUser.id) await refreshPontoSummary();
+    } catch (err) {
+      console.error("Falha ao salvar célula da planilha:", err);
+      punchSheetError.textContent = "Não foi possível salvar essa alteração.";
+      await renderPunchSheet(); // desfaz visualmente, recarregando os dados reais
+    }
+  }
+
+  punchSheetPrevBtn.addEventListener("click", () => changeSheetMonth(-1));
+  punchSheetNextBtn.addEventListener("click", () => changeSheetMonth(1));
+  punchSheetCloseBtn.addEventListener("click", closePunchSheetModal);
+  punchSheetOverlay.addEventListener("click", (e) => {
+    if (e.target === punchSheetOverlay) closePunchSheetModal();
+  });
+
+  // --- calendário: feriados e recesso de 2026/2027 (assets/js/ponto-store.js
+  // é quem sabe da tabela; aqui só listamos e agrupamos dias seguidos). ---
+  const calendarList2026 = document.getElementById("calendar-list-2026");
+  const calendarList2027 = document.getElementById("calendar-list-2027");
+  const MONTH_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+  function parseDateOnly(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  /** Merges consecutive calendar dates with the same name/type into one
+   * range (e.g. 6 separate "Recesso" rows becomes one "19–24 dez" row) —
+   * purely a display grouping, the underlying rows stay one-per-day. */
+  function groupConsecutiveHolidays(holidays) {
+    const groups = [];
+    holidays.forEach((h) => {
+      const date = parseDateOnly(h.date);
+      const last = groups[groups.length - 1];
+      if (last && last.name === h.name && last.type === h.type) {
+        const nextDay = new Date(last.end);
+        nextDay.setDate(nextDay.getDate() + 1);
+        if (nextDay.getTime() === date.getTime()) {
+          last.end = date;
+          return;
+        }
+      }
+      groups.push({ start: date, end: date, name: h.name, type: h.type });
+    });
+    return groups;
+  }
+
+  function formatCalendarDate(group) {
+    const p = (n) => String(n).padStart(2, "0");
+    const label = (d) => `${p(d.getDate())} ${MONTH_SHORT[d.getMonth()]}`;
+    if (group.start.getTime() === group.end.getTime()) return label(group.start);
+    return `${label(group.start)} – ${label(group.end)}`;
+  }
+
+  const CALENDAR_BADGE_LABELS = { feriado: "Feriado", recesso: "Recesso", aniversario: "🎂 Aniversário" };
+
+  /** Projects each team birthday (month/day only, no year) onto a specific
+   * calendar year, so it can be merged and sorted alongside that year's
+   * holidays. Purely a display concern — birthdays never touch hour calcs. */
+  function birthdaysForYear(birthdays, year) {
+    return birthdays.map((b) => ({
+      date: `${year}-${String(b.month).padStart(2, "0")}-${String(b.day).padStart(2, "0")}`,
+      name: `Aniversário de ${b.name}`,
+      type: "aniversario",
+    }));
+  }
+
+  function renderCalendarList(container, entries) {
+    if (entries.length === 0) {
+      container.innerHTML = '<p class="empty">Nenhum evento cadastrado.</p>';
+      return;
+    }
+    const sorted = entries.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    container.innerHTML = groupConsecutiveHolidays(sorted)
+      .map(
+        (g) => `
+        <div class="calendar-row">
+          <span class="calendar-date">${escapeHtml(formatCalendarDate(g))}</span>
+          <span class="calendar-name">${escapeHtml(g.name)}</span>
+          <span class="calendar-badge ${g.type}">${CALENDAR_BADGE_LABELS[g.type]}</span>
+        </div>`
+      )
+      .join("");
+  }
+
+  async function renderCalendarPage() {
+    calendarList2026.innerHTML = '<p class="empty">Carregando…</p>';
+    calendarList2027.innerHTML = '<p class="empty">Carregando…</p>';
+    try {
+      const [h2026, h2027, birthdays] = await Promise.all([
+        getHolidaysForYear(2026),
+        getHolidaysForYear(2027),
+        getBirthdays(),
+      ]);
+      renderCalendarList(calendarList2026, [...h2026, ...birthdaysForYear(birthdays, 2026)]);
+      renderCalendarList(calendarList2027, [...h2027, ...birthdaysForYear(birthdays, 2027)]);
+    } catch (err) {
+      console.error("Falha ao carregar calendário:", err);
+      calendarList2026.innerHTML = '<p class="empty">Não foi possível carregar o calendário.</p>';
+      calendarList2027.innerHTML = '<p class="empty">Não foi possível carregar o calendário.</p>';
+    }
+  }
 
   // --- initial load: fetch users from Supabase, then restore session (if
   // any) so refreshing the page doesn't log you out ---

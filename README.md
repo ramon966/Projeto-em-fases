@@ -54,8 +54,11 @@ Projeto-em-fases-/
 │       ├── ponto-store.js        # camada de dados de ponto + cálculo de horas (hoje: Supabase)
 │       └── app.js                # lógica de UI: views, grid, modal, login, sidebar, ponto
 ├── supabase/
-│   ├── schema.sql                # schema da tabela users + policies de RLS
-│   └── schema_ponto.sql          # schema de work_schedules e time_punches + RLS
+│   ├── schema.sql                     # schema da tabela users + policies de RLS
+│   ├── schema_ponto.sql               # schema de work_schedules e time_punches + RLS
+│   ├── schema_ponto_corrections.sql   # schema de punch_corrections (justificativas) + RLS
+│   ├── schema_holidays.sql            # schema de holidays (feriados/recesso 2026-2027) + RLS
+│   └── schema_birthdays.sql           # schema de birthdays (aniversários da equipe) + RLS
 ├── .gitignore
 └── README.md
 ```
@@ -84,11 +87,16 @@ esbarram na restrição de CORS que navegadores aplicam a módulos
 carregados via `file://`.
 
 Como os dados agora vêm do Supabase, é preciso **conexão com a
-internet** e que as tabelas já existam no banco — rode
-[supabase/schema.sql](supabase/schema.sql) e depois
-[supabase/schema_ponto.sql](supabase/schema_ponto.sql) (nessa ordem,
-porque o segundo depende da tabela `users`) no SQL Editor do projeto
-Supabase antes de abrir a página pela primeira vez.
+internet** e que as tabelas já existam no banco — rode, nessa ordem,
+[supabase/schema.sql](supabase/schema.sql),
+[supabase/schema_ponto.sql](supabase/schema_ponto.sql),
+[supabase/schema_ponto_corrections.sql](supabase/schema_ponto_corrections.sql),
+[supabase/schema_holidays.sql](supabase/schema_holidays.sql) e
+[supabase/schema_birthdays.sql](supabase/schema_birthdays.sql)
+no SQL Editor do projeto Supabase antes de abrir a página pela
+primeira vez (os três primeiros dependem do anterior por causa das
+foreign keys; `schema_birthdays.sql` é independente, pode rodar em
+qualquer ordem).
 
 ## Dados de teste
 
@@ -127,17 +135,57 @@ cada colaborador (dias da semana + horas por dia). Escala padrão de
 fábrica, usada até o admin configurar algo diferente: **segunda a
 sexta, 8h/dia (5x2, 40h/semana)**.
 
-**Correção manual de ponto** (botão "Corrigir ponto"): abre um modal
-para um dia específico, com todas as batidas daquele dia — dá pra
-adicionar uma batida esquecida, editar o tipo/horário de uma batida
-errada ou excluir uma duplicada.
+**Admin não bate ponto.** O card de bater ponto/horas/banco de horas
+some para quem tem cargo Admin — a página dele mostra só o painel de
+gestão (escala + planilha + justificativas), descrito abaixo.
 
-- Qualquer colaborador só corrige o **próprio** ponto (sem seletor de
-  colaborador no modal).
-- Quem é **Admin** corrige o ponto de **qualquer** colaborador — no
-  card principal (com um seletor de colaborador) ou direto pelo ícone
-  de relógio ao lado de "Configurar horário", na lista de
-  colaboradores.
+**Correção de ponto**, com regras diferentes por cargo:
+
+- **Colaborador comum** só corrige o **próprio** ponto, pelo botão
+  "Corrigir ponto": um modal de um dia específico, com todas as
+  batidas daquele dia (adicionar uma esquecida, editar tipo/horário de
+  uma errada, excluir uma duplicada). É **obrigatório escrever uma
+  justificativa** antes de salvar qualquer alteração — ela fica
+  registrada com o nome do colaborador e some para o admin em
+  "Justificativas recebidas".
+- **Admin** corrige o ponto de **qualquer** colaborador direto pelo
+  ícone de relógio na lista de colaboradores, mas numa **planilha do
+  mês inteiro** (estilo Excel): uma linha por dia do mês corrente,
+  seguindo o calendário real (28 a 31 dias, conforme o mês/ano — o
+  mesmo calendário usado no Brasil), com os 4 horários do dia editáveis
+  lado a lado e total/esperado/diferença calculados na hora. Dá pra
+  navegar entre meses. Correção de admin não exige justificativa.
+
+## Calendário (feriados, recesso e aniversários)
+
+Menu "Calendário" na sidebar, visível para qualquer colaborador logado
+(informativo — não é restrito a Admin). Lista os feriados de 2026 e
+2027 junto com os aniversários da equipe, tudo em ordem cronológica,
+com dias seguidos do mesmo tipo agrupados numa faixa (ex.: "19–24 dez —
+Recesso de fim de ano") para ficar mais fácil de ler.
+
+**Aniversários** (tabela `birthdays`, mês/dia sem ano — repete todo
+ano, então aparece igual em 2026 e 2027): Victor (23/01), Veronica
+(05/01), João Marcelo (18/03), Brithany (21/05), Ramon (17/05),
+Thainara (13/06), Nathan (26/07), Felibe (05/08), Lara (31/08), Marina
+(08/10), Carol (27/10), Vinicius (10/11), Ana Paula (22/12). São
+puramente informativos — **não entram** no cálculo de horas
+esperadas (só `holidays` afeta isso).
+
+Esses dias **não contam como esperado** no cálculo de horas/banco de
+horas do módulo Ponto, mesmo caindo num dia da semana em que o
+colaborador normalmente trabalha (ver `expectedMinutes` em
+`assets/js/ponto-store.js`) — tanto no resumo pessoal quanto na
+planilha mensal do admin, onde o dia aparece marcado com 🔸 e uma cor
+diferente.
+
+Inclui os feriados nacionais fixos e móveis (Carnaval, Sexta-feira
+Santa e Corpus Christi, calculados a partir da Páscoa de cada ano) e o
+recesso de fim de ano combinado: **19/12/2026 a 04/01/2027**. **Não
+inclui** feriados municipais específicos de Goiânia (ex.: aniversário
+da cidade) — não temos certeza da data exata para não arriscar um
+cálculo de horas errado; se você souber qual é, me avisa que eu
+adiciono em `supabase/schema_holidays.sql`.
 
 ## Roadmap
 
@@ -149,8 +197,13 @@ Para deixar de ser um protótipo e virar um produto vendável, falta:
 - [ ] Apertar as policies de RLS depois que houver autenticação (hoje a `anon key` tem acesso total)
 - [ ] Validação de e-mail único e regras de permissão reforçadas no servidor
 - [x] Correção manual de ponto (adicionar/editar/excluir batidas)
+- [x] Justificativa obrigatória quando um colaborador corrige o próprio ponto
+- [x] Calendário de feriados/recesso, com exclusão automática do cálculo de horas
+- [x] Aniversários da equipe no Calendário (informativo, não afeta cálculo de horas)
+- [ ] Feriado municipal de Goiânia (se houver um específico) — não incluído por falta de certeza da data
+- [ ] Tela para o admin editar `holidays`/`birthdays` pela UI, em vez de só pelo SQL Editor
 - [ ] Fotos de perfil no Supabase Storage em vez de base64 na tabela
 - [ ] Variáveis de ambiente/build para a config do Supabase, em vez de valores fixos em `supabase-client.js`
-- [ ] Histórico/auditoria de quem corrigiu qual batida — hoje a correção não deixa rastro de quem editou
+- [ ] Correções feitas pelo admin (pela planilha) não deixam rastro — só as do próprio colaborador viram justificativa
 - [ ] Testes automatizados (pelo menos do fluxo de login, CRUD de usuários e ponto)
 - [ ] Pipeline de deploy (CI/CD)
