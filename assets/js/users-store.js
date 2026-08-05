@@ -1,95 +1,87 @@
-// Data layer for users. Backed by localStorage for now — this is the module
-// to replace with real HTTP calls to a backend API when one exists. Nothing
-// outside this file should touch localStorage or know the storage key.
+// Data layer for users. Backed by Supabase (see supabase/schema.sql for the
+// table + RLS policies, and assets/js/supabase-client.js for the connection).
+// Nothing outside this file should talk to the Supabase client directly.
 //
 // Exposed as window.UsersStore (classic script, not an ES module) so the
 // page works whether it's opened through a local server or double-clicked
 // directly from the file system.
 window.UsersStore = (function () {
-  // v3: role is now one of "Usuário" / "Admin" / "Estagiário" (a fixed set,
-  // picked from a <select>) instead of free text, and isAdmin is derived
-  // from role. Bumping the key so anyone with old v2 data gets a clean
-  // reseed instead of records that don't match the new role options.
-  const STORAGE_KEY = "norteagro.users.v3";
   const SESSION_KEY = "norteagro.session";
+  const TABLE = "users";
 
-  const DEFAULT_USERS = [
-    { name: "Administrador", email: "admin@norteagro.com.br", role: "Admin" },
-    { name: "Equipe Técnica", email: "tecnica@norteagro.com.br", role: "Usuário" },
-    { name: "Atendimento", email: "atendimento@norteagro.com.br", role: "Usuário" },
-  ];
+  function db() {
+    return window.supabaseClient;
+  }
 
-  let nextId = 1;
-
-  function todayStr() {
-    const d = new Date();
+  function formatDate(iso) {
+    const d = new Date(iso);
     const p = (n) => String(n).padStart(2, "0");
     return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
   }
 
-  function persist(list) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-    } catch (e) {
-      // localStorage unavailable (private mode, quota, etc.) — fail silently,
-      // the in-memory list still works for the current session.
-    }
-  }
-
-  /** Loads users from storage, seeding the default set on first run. */
-  function loadUsers() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        nextId = parsed.reduce((max, u) => Math.max(max, u.id), 0) + 1;
-        return parsed;
-      }
-    } catch (e) {
-      // corrupted or inaccessible storage — fall through to reseeding
-    }
-    const seeded = DEFAULT_USERS.map((u) => ({
-      id: nextId++,
-      name: u.name,
-      email: u.email,
-      role: u.role,
-      isAdmin: u.role === "Admin",
-      photo: null,
-      createdAt: todayStr(),
-    }));
-    persist(seeded);
-    return seeded;
-  }
-
-  /** Persists the full user list. */
-  function saveUsers(list) {
-    persist(list);
-  }
-
-  /**
-   * Builds a new user record with a generated id and creation date.
-   * isAdmin is derived from role ("Admin") rather than set independently,
-   * so the two can never disagree.
-   */
-  function createUser({ name, email, role, photo }) {
+  /** Maps a DB row (snake_case) to the shape the UI expects (camelCase).
+   * isAdmin comes straight from the generated `is_admin` column, so it can
+   * never disagree with role the way a separately-set field could. */
+  function mapRow(row) {
     return {
-      id: nextId++,
-      name,
-      email,
-      role,
-      isAdmin: role === "Admin",
-      photo: photo || null,
-      createdAt: todayStr(),
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      role: row.role,
+      isAdmin: row.is_admin,
+      photo: row.photo,
+      createdAt: formatDate(row.created_at),
     };
   }
 
-  /** Case-insensitive lookup by email, used to resolve the logged-in user. */
+  /** Loads every user from Supabase. Throws on failure — callers decide how
+   * to surface the error (there's no local fallback anymore). */
+  async function loadUsers() {
+    const { data, error } = await db().from(TABLE).select("*").order("id", { ascending: true });
+    if (error) throw error;
+    return data.map(mapRow);
+  }
+
+  /** Inserts a new user and returns the created record, including the id
+   * and createdAt assigned by the database. */
+  async function createUser({ name, email, role, photo }) {
+    const { data, error } = await db()
+      .from(TABLE)
+      .insert({ name, email, role, photo: photo || null })
+      .select()
+      .single();
+    if (error) throw error;
+    return mapRow(data);
+  }
+
+  /** Updates an existing user by id and returns the updated record. */
+  async function updateUser(id, { name, email, role, photo }) {
+    const { data, error } = await db()
+      .from(TABLE)
+      .update({ name, email, role, photo: photo || null })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return mapRow(data);
+  }
+
+  /** Deletes a user by id. */
+  async function deleteUser(id) {
+    const { error } = await db().from(TABLE).delete().eq("id", id);
+    if (error) throw error;
+  }
+
+  /** Case-insensitive lookup by email, used to resolve the logged-in user.
+   * Runs against an already-loaded list — no extra round trip to the DB. */
   function findUserByEmail(users, email) {
     const target = email.trim().toLowerCase();
     return users.find((u) => u.email.toLowerCase() === target) || null;
   }
 
-  /** Remembers who's logged in so a page refresh doesn't force a new login. */
+  /** Remembers who's logged in so a page refresh doesn't force a new login.
+   * Still just localStorage — there's no real session/token yet (see
+   * README, "Sem autenticação real"). */
   function saveSession(userId) {
     try {
       localStorage.setItem(SESSION_KEY, String(userId));
@@ -117,5 +109,14 @@ window.UsersStore = (function () {
     }
   }
 
-  return { loadUsers, saveUsers, createUser, findUserByEmail, saveSession, loadSession, clearSession };
+  return {
+    loadUsers,
+    createUser,
+    updateUser,
+    deleteUser,
+    findUserByEmail,
+    saveSession,
+    loadSession,
+    clearSession,
+  };
 })();

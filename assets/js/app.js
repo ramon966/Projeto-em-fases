@@ -2,7 +2,7 @@
 // the login form, and the sidebar. Data access goes through window.UsersStore
 // (assets/js/users-store.js) — this file never touches localStorage directly.
 (function () {
-  const { loadUsers, saveUsers, createUser, findUserByEmail, saveSession, loadSession, clearSession } = window.UsersStore;
+  const { loadUsers, createUser, updateUser, deleteUser, findUserByEmail, saveSession, loadSession, clearSession } = window.UsersStore;
 
   const PERSON_ICON =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
@@ -11,7 +11,9 @@
   const UNKNOWN_ICON =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>';
 
-  let users = loadUsers();
+  // Populated asynchronously by init() once the Supabase fetch resolves —
+  // everything that reads `users` before then only runs after init() awaits.
+  let users = [];
   let currentUser = null;
 
   function escapeHtml(s) {
@@ -144,11 +146,20 @@
   confirmOverlay.addEventListener("click", (e) => {
     if (e.target === confirmOverlay) closeDeleteConfirm();
   });
-  confirmDeleteBtn.addEventListener("click", () => {
-    users = users.filter((x) => x.id !== pendingDeleteId);
-    saveUsers(users);
-    closeDeleteConfirm();
-    renderGrid();
+  confirmDeleteBtn.addEventListener("click", async () => {
+    const id = pendingDeleteId;
+    confirmDeleteBtn.disabled = true;
+    try {
+      await deleteUser(id);
+      users = users.filter((x) => x.id !== id);
+      closeDeleteConfirm();
+      renderGrid();
+    } catch (err) {
+      console.error("Falha ao excluir usuário:", err);
+      alert("Não foi possível excluir o usuário. Tente novamente.");
+    } finally {
+      confirmDeleteBtn.disabled = false;
+    }
   });
 
   // --- grid / list view toggle ---
@@ -246,7 +257,7 @@
     if (!confirmOverlay.hidden) closeDeleteConfirm();
   });
 
-  mSave.addEventListener("click", () => {
+  mSave.addEventListener("click", async () => {
     const name = mName.value.trim();
     const email = mEmail.value.trim();
     const role = mRole.value.trim();
@@ -261,28 +272,33 @@
       mEmail.focus();
       return;
     }
-
-    if (editingId === null) {
-      if (mPass.value.length < 4) {
-        mError.textContent = "A senha deve ter ao menos 4 caracteres.";
-        mPass.focus();
-        return;
-      }
-      users.push(createUser({ name, email, role, photo: chosenPhoto }));
-    } else {
-      const u = users.find((x) => x.id === editingId);
-      if (u) {
-        u.name = name;
-        u.email = email;
-        u.role = role;
-        u.isAdmin = role === "Admin";
-        u.photo = chosenPhoto;
-      }
+    if (editingId === null && mPass.value.length < 4) {
+      mError.textContent = "A senha deve ter ao menos 4 caracteres.";
+      mPass.focus();
+      return;
     }
-    saveUsers(users);
-    closeModal();
-    renderGrid();
-    applyPermissions();
+
+    mError.textContent = "";
+    mSave.disabled = true;
+    try {
+      if (editingId === null) {
+        const created = await createUser({ name, email, role, photo: chosenPhoto });
+        users.push(created);
+      } else {
+        const updated = await updateUser(editingId, { name, email, role, photo: chosenPhoto });
+        const idx = users.findIndex((x) => x.id === editingId);
+        if (idx !== -1) users[idx] = updated;
+        if (currentUser && currentUser.id === editingId) currentUser = updated;
+      }
+      closeModal();
+      renderGrid();
+      applyPermissions();
+    } catch (err) {
+      console.error("Falha ao salvar usuário:", err);
+      mError.textContent = "Não foi possível salvar. Verifique a conexão ou se o e-mail já está cadastrado.";
+    } finally {
+      mSave.disabled = false;
+    }
   });
 
   // --- login form ---
@@ -395,16 +411,30 @@
     });
   });
 
-  // --- restore session on reload, so refreshing the page doesn't log you out ---
-  const sessionId = loadSession();
-  const restoredUser = sessionId !== null ? users.find((u) => u.id === sessionId) : null;
-  if (restoredUser) {
-    currentUser = restoredUser;
-    applyPermissions();
-    renderGrid();
-    showView("users");
-  } else {
-    clearSession();
-    showView("login");
+  // --- initial load: fetch users from Supabase, then restore session (if
+  // any) so refreshing the page doesn't log you out ---
+  async function init() {
+    try {
+      users = await loadUsers();
+    } catch (err) {
+      console.error("Falha ao carregar usuários do Supabase:", err);
+      loginError.textContent =
+        "Não foi possível conectar ao banco de dados. Confira o console (F12) para detalhes.";
+      showView("login");
+      return;
+    }
+
+    const sessionId = loadSession();
+    const restoredUser = sessionId !== null ? users.find((u) => u.id === sessionId) : null;
+    if (restoredUser) {
+      currentUser = restoredUser;
+      applyPermissions();
+      renderGrid();
+      showView("users");
+    } else {
+      clearSession();
+      showView("login");
+    }
   }
+  init();
 })();
