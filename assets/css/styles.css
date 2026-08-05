@@ -458,6 +458,69 @@ body {
 .modal-actions { display: flex; gap: 10px; margin-top: 4px; }
 .modal-actions .btn { flex: 1; }
 
+/* --- ponto (time clock) --- */
+.ponto-layout { display: flex; flex-direction: column; gap: 20px; max-width: 640px; }
+.ponto-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: var(--shadow); padding: 22px 24px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.ponto-punch-btn { font-size: 15px; padding: 14px 18px; }
+.ponto-punch-btn svg { width: 16px; height: 16px; }
+
+.ponto-stats { display: flex; flex-wrap: wrap; gap: 22px; }
+.ponto-stat { display: flex; flex-direction: column; gap: 4px; flex: 1 1 140px; }
+.ponto-stat-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); font-weight: 700; }
+.ponto-stat-value { font-size: 15px; font-weight: 700; color: var(--text); }
+.ponto-stat-value.positive { color: var(--success); }
+.ponto-stat-value.negative { color: var(--danger); }
+
+.ponto-admin-title { font-size: 14px; font-weight: 700; }
+.ponto-schedule-list { display: flex; flex-direction: column; }
+.ponto-schedule-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.ponto-schedule-row:first-child { border-top: none; }
+.ponto-schedule-name { font-size: 13.5px; font-weight: 600; flex: 1 1 140px; }
+.ponto-schedule-summary { font-size: 12.5px; color: var(--text-muted); flex: 2 1 180px; }
+
+.weekday-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.weekday-chip {
+  font: inherit; font-size: 12px; font-weight: 700; padding: 7px 11px; border-radius: 999px;
+  border: 1px solid var(--border-strong); background: var(--panel-2); color: var(--text-muted); cursor: pointer;
+}
+.weekday-chip:hover { border-color: var(--accent); color: var(--accent); }
+.weekday-chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.weekday-chip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.ponto-correct-btn { align-self: flex-start; }
+
+@media (min-width: 860px) {
+  .ponto-layout { flex-direction: row; align-items: flex-start; max-width: none; }
+  .ponto-layout .ponto-card { flex: 1 1 0; }
+}
+
+/* --- ponto: modal de correção manual (mais largo que os demais, por causa
+   das linhas com select + horário + ações) --- */
+.punch-edit-panel { max-width: 480px; }
+.punch-edit-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+.punch-edit-row, .punch-edit-add {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 9px; background: var(--panel-2);
+}
+.punch-edit-row select, .punch-edit-add select {
+  flex: 1 1 150px; font: inherit; font-size: 12.5px; padding: 7px 8px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
+}
+.punch-edit-row input[type="time"], .punch-edit-add input[type="time"] {
+  flex: 0 1 100px; font: inherit; font-size: 12.5px; padding: 7px 8px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
+}
+.punch-edit-add { background: none; border: 1px dashed var(--border-strong); }
+.punch-edit-add .btn { flex: none; padding: 7px 12px; font-size: 12.5px; }
+.punch-edit-add .btn svg { width: 12px; height: 12px; }
+
 footer { text-align: center; margin-top: 34px; font-size: 11px; color: var(--text-faint); letter-spacing: 0.02em; }
 
 @keyframes spin { to { transform: rotate(360deg); } }

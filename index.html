@@ -73,6 +73,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
         <span class="nav-label">Usuários</span>
       </button>
+      <button type="button" class="sidebar-nav-item" data-nav="ponto" title="Ponto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span class="nav-label">Ponto</span>
+      </button>
     </nav>
 
     <div class="sidebar-footer">
@@ -160,6 +164,50 @@
         <span class="picker-title">Dashboard</span>
       </div>
     </section>
+
+    <section id="page-ponto" class="page" hidden>
+      <div class="picker-head">
+        <span class="picker-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </span>
+        <span class="picker-title">Ponto</span>
+      </div>
+
+      <div class="ponto-layout">
+        <div class="ponto-card">
+          <button type="button" class="btn block ponto-punch-btn" id="ponto-punch-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span id="ponto-punch-label">Bater entrada</span>
+          </button>
+          <p class="error-msg" id="ponto-punch-error"></p>
+
+          <div class="ponto-stats">
+            <div class="ponto-stat">
+              <span class="ponto-stat-label">Último ponto</span>
+              <span class="ponto-stat-value" id="ponto-last-punch">—</span>
+            </div>
+            <div class="ponto-stat">
+              <span class="ponto-stat-label">Horas no mês</span>
+              <span class="ponto-stat-value" id="ponto-worked-hours">—</span>
+            </div>
+            <div class="ponto-stat">
+              <span class="ponto-stat-label">Banco de horas</span>
+              <span class="ponto-stat-value" id="ponto-hour-bank">—</span>
+            </div>
+          </div>
+
+          <button type="button" class="btn secondary ponto-correct-btn" id="ponto-correct-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+            Corrigir ponto
+          </button>
+        </div>
+
+        <div class="ponto-card" id="ponto-admin-panel" hidden>
+          <span class="ponto-admin-title">Horário dos colaboradores</span>
+          <div class="ponto-schedule-list" id="ponto-schedule-list"></div>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -231,9 +279,80 @@
   </div>
 </div>
 
+<!-- modal: configurar horário de trabalho de um colaborador (admin) -->
+<div class="modal-overlay" id="schedule-overlay" hidden>
+  <div class="modal-panel">
+    <div class="modal-head">
+      <span class="modal-title" id="schedule-modal-title">Horário de trabalho</span>
+    </div>
+    <div class="field">
+      <label>Dias de trabalho</label>
+      <div class="weekday-picker" id="schedule-weekdays">
+        <button type="button" class="weekday-chip" data-day="1">Seg</button>
+        <button type="button" class="weekday-chip" data-day="2">Ter</button>
+        <button type="button" class="weekday-chip" data-day="3">Qua</button>
+        <button type="button" class="weekday-chip" data-day="4">Qui</button>
+        <button type="button" class="weekday-chip" data-day="5">Sex</button>
+        <button type="button" class="weekday-chip" data-day="6">Sáb</button>
+        <button type="button" class="weekday-chip" data-day="7">Dom</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="schedule-hours">Horas por dia</label>
+      <input id="schedule-hours" type="number" min="1" max="24" step="0.5" />
+    </div>
+    <p class="error-msg" id="schedule-error"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn secondary" id="schedule-cancel">Cancelar</button>
+      <button type="button" class="btn" id="schedule-save">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal: corrigir ponto (adicionar/editar/excluir batidas de um dia) -->
+<div class="modal-overlay" id="punch-edit-overlay" hidden>
+  <div class="modal-panel punch-edit-panel">
+    <div class="modal-head">
+      <span class="modal-title" id="punch-edit-title">Corrigir ponto</span>
+    </div>
+
+    <div class="field" id="punch-edit-user-field">
+      <label for="punch-edit-user">Colaborador</label>
+      <select id="punch-edit-user"></select>
+    </div>
+
+    <div class="field">
+      <label for="punch-edit-date">Dia</label>
+      <input id="punch-edit-date" type="date" />
+    </div>
+
+    <div class="punch-edit-list" id="punch-edit-list"></div>
+
+    <div class="punch-edit-add">
+      <select id="punch-add-type">
+        <option value="entrada">Entrada</option>
+        <option value="saida_almoco">Saída (almoço)</option>
+        <option value="volta_almoco">Volta (almoço)</option>
+        <option value="saida">Saída</option>
+      </select>
+      <input id="punch-add-time" type="time" />
+      <button type="button" class="btn secondary" id="punch-add-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        Adicionar
+      </button>
+    </div>
+
+    <p class="error-msg" id="punch-edit-error"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="punch-edit-close">Concluído</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="assets/js/supabase-client.js"></script>
 <script src="assets/js/users-store.js"></script>
+<script src="assets/js/ponto-store.js"></script>
 <script src="assets/js/theme.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
