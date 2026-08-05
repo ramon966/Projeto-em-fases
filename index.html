@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Norte Agro Projetos — Acesso</title>
+<link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+
+<!-- 1. LOGIN -->
+<section id="view-login" class="view view-login">
+  <div class="login-stage">
+    <div class="letterhead">
+      <div class="mark">
+        <span class="wordmark-lines">
+          <span class="wordmark">NORTE AGRO</span>
+          <span class="wordmark-sub">PROJETOS</span>
+        </span>
+        <span class="leaf-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M12 2c-4 3.2-6 6.9-6 10.4C6 17 8.7 20 12 20s6-3 6-7.6C18 8.9 16 5.2 12 2Z" fill="currentColor"/>
+            <path d="M12 6.5c0 5-2.6 7.5-2.6 10.7" stroke="var(--panel)" stroke-width="1.1" stroke-linecap="round"/>
+          </svg>
+        </span>
+      </div>
+      <p class="tagline">Regularização de Imóveis Rurais</p>
+    </div>
+
+    <div class="login-panel">
+      <span class="login-panel-title">Acessar plataforma</span>
+      <div class="field">
+        <label for="login-user">Usuário</label>
+        <input id="login-user" type="text" autocomplete="username" />
+      </div>
+      <div class="field">
+        <label for="login-pass">Senha</label>
+        <input id="login-pass" type="password" autocomplete="current-password" />
+      </div>
+      <p class="error-msg" id="login-error"></p>
+      <button type="button" class="btn block" id="login-submit">
+        Entrar
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      </button>
+    </div>
+
+    <footer>Acesso restrito à equipe Norte Agro Projetos · Goiás, Centro‑Oeste</footer>
+  </div>
+</section>
+
+<!-- 2. USERS (visible only after login) -->
+<div id="view-users" class="view app-shell" hidden>
+  <aside class="sidebar" id="sidebar">
+    <button type="button" class="sidebar-logo" id="sidebar-logo-toggle" aria-label="Recolher menu">
+      <span class="leaf-icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M12 2c-4 3.2-6 6.9-6 10.4C6 17 8.7 20 12 20s6-3 6-7.6C18 8.9 16 5.2 12 2Z" fill="currentColor"/>
+          <path d="M12 6.5c0 5-2.6 7.5-2.6 10.7" stroke="var(--panel)" stroke-width="1.1" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="sidebar-wordmark">
+        <span class="sidebar-wordmark-main">NORTE AGRO</span>
+        <span class="sidebar-wordmark-sub">PROJETOS</span>
+      </span>
+    </button>
+
+    <nav class="sidebar-nav">
+      <button type="button" class="sidebar-nav-item" data-nav="dashboard" title="Dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect width="7" height="9" x="3" y="3" rx="1.3"/><rect width="7" height="5" x="14" y="3" rx="1.3"/><rect width="7" height="9" x="14" y="12" rx="1.3"/><rect width="7" height="5" x="3" y="16" rx="1.3"/></svg>
+        <span class="nav-label">Dashboard</span>
+      </button>
+      <button type="button" class="sidebar-nav-item active" data-nav="usuarios" aria-current="page" title="Usuários">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
+        <span class="nav-label">Usuários</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button type="button" class="sidebar-action sidebar-toggle" id="sidebar-toggle" aria-label="Recolher menu" title="Recolher menu">
+        <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>
+        <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></svg>
+        <span class="action-label">Recolher menu</span>
+      </button>
+      <button type="button" class="sidebar-action" id="logout-link" title="Sair da conta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>
+        <span class="action-label">Sair da conta</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <div class="topbar-search">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.34-4.34"/></svg>
+        <input id="topbar-search-input" type="text" placeholder="Buscar..." />
+      </div>
+
+      <div class="topbar-actions">
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Alternar para modo escuro">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+        </button>
+
+        <button type="button" class="icon-btn" id="notification-btn" title="Notificações" aria-label="Notificações">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></svg>
+        </button>
+
+        <span class="topbar-divider" aria-hidden="true"></span>
+
+        <button type="button" class="topbar-user" id="topbar-user" title="Editar minha conta" hidden>
+          <span class="topbar-user-icon" id="topbar-user-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </span>
+          <span class="topbar-user-info">
+            <span class="topbar-user-name" id="topbar-user-name"></span>
+            <span class="topbar-user-email" id="topbar-user-email"></span>
+          </span>
+        </button>
+      </div>
+    </header>
+
+    <section id="page-usuarios" class="page">
+      <div class="picker-head">
+        <span class="picker-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
+        </span>
+        <span class="picker-title">Usuários</span>
+      </div>
+
+      <div class="toolbar">
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.34-4.34"/></svg>
+          <input id="search-input" type="text" placeholder="Pesquisar usuários..." />
+        </div>
+        <button type="button" class="view-toggle" id="view-toggle" title="Visualizar em lista" aria-label="Visualizar em lista" data-mode="grid">
+          <svg class="icon-grid" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="7" height="7" x="3" y="3" rx="1"/>
+            <rect width="7" height="7" x="14" y="3" rx="1"/>
+            <rect width="7" height="7" x="14" y="14" rx="1"/>
+            <rect width="7" height="7" x="3" y="14" rx="1"/>
+          </svg>
+          <svg class="icon-list" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/>
+          </svg>
+        </button>
+        <button type="button" class="btn secondary" id="open-create" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+          Adicionar usuário
+        </button>
+      </div>
+
+      <div class="grid" id="grid" role="list"></div>
+    </section>
+
+    <section id="page-dashboard" class="page" hidden>
+      <div class="picker-head">
+        <span class="picker-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect width="7" height="9" x="3" y="3" rx="1.3"/><rect width="7" height="5" x="14" y="3" rx="1.3"/><rect width="7" height="9" x="14" y="12" rx="1.3"/><rect width="7" height="5" x="3" y="16" rx="1.3"/></svg>
+        </span>
+        <span class="picker-title">Dashboard</span>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- modal: add / edit user -->
+<div class="modal-overlay" id="modal-overlay" hidden>
+  <div class="modal-panel">
+    <div class="modal-head">
+      <span class="modal-title" id="modal-title">Novo usuário</span>
+    </div>
+    <div class="field">
+      <div class="photo-picker">
+        <span class="photo-preview" id="m-photo-preview">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </span>
+        <input type="file" id="m-photo" accept="image/*" hidden />
+        <label class="photo-badge photo-badge-upload" id="m-photo-upload-badge" for="m-photo" tabindex="0" title="Escolher foto" aria-label="Escolher foto">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"/>
+            <circle cx="12" cy="13" r="3"/>
+          </svg>
+        </label>
+        <button type="button" class="photo-badge photo-badge-remove" id="m-photo-remove" hidden title="Remover foto" aria-label="Remover foto">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="m-name">Nome</label>
+      <input id="m-name" type="text" autocomplete="off" placeholder="Nome completo" />
+    </div>
+    <div class="field">
+      <label for="m-email">E-mail</label>
+      <input id="m-email" type="email" autocomplete="off" placeholder="nome@norteagro.com.br" />
+    </div>
+    <div class="field">
+      <label for="m-role">Cargo</label>
+      <select id="m-role">
+        <option value="Usuário">Usuário</option>
+        <option value="Admin">Admin</option>
+        <option value="Estagiário">Estagiário</option>
+      </select>
+    </div>
+    <div class="field" id="m-pass-field">
+      <label for="m-pass">Senha</label>
+      <input id="m-pass" type="password" autocomplete="new-password" placeholder="Mínimo 4 caracteres" />
+    </div>
+    <p class="error-msg" id="m-error"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn secondary" id="m-cancel">Cancelar</button>
+      <button type="button" class="btn" id="m-save">Cadastrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal: confirm delete -->
+<div class="modal-overlay" id="confirm-overlay" hidden>
+  <div class="modal-panel confirm-panel">
+    <div class="modal-head">
+      <span class="modal-title">Excluir usuário</span>
+    </div>
+    <span class="confirm-icon-chip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+    </span>
+    <p class="confirm-message" id="confirm-message"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn secondary" id="confirm-cancel">Cancelar</button>
+      <button type="button" class="btn danger" id="confirm-delete">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/users-store.js"></script>
+<script src="assets/js/theme.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
