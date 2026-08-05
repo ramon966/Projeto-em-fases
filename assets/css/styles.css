@@ -477,15 +477,24 @@ body {
 .ponto-stat-value.positive { color: var(--success); }
 .ponto-stat-value.negative { color: var(--danger); }
 
+.ponto-admin-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .ponto-admin-title { font-size: 14px; font-weight: 700; }
+#ponto-view-history-btn { padding: 7px 12px; font-size: 12.5px; flex: none; }
+#ponto-view-history-btn svg { width: 13px; height: 13px; }
 .ponto-schedule-list { display: flex; flex-direction: column; }
-.ponto-schedule-row {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 10px 0;
-  border-top: 1px solid var(--border);
+
+/* --- ponto: tabela de horário/correção dos colaboradores (admin) --- */
+.schedule-table-scroll { overflow-x: auto; }
+.schedule-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.schedule-table th {
+  text-align: left; padding: 8px 10px; color: var(--text-muted);
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;
+  border-bottom: 1px solid var(--border);
 }
-.ponto-schedule-row:first-child { border-top: none; }
-.ponto-schedule-name { font-size: 13.5px; font-weight: 600; flex: 1 1 140px; }
-.ponto-schedule-summary { font-size: 12.5px; color: var(--text-muted); flex: 2 1 180px; }
+.schedule-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
+.schedule-table tr:last-child td { border-bottom: none; }
+.schedule-table-name { font-weight: 600; white-space: normal; }
+.schedule-table-actions { display: flex; gap: 4px; justify-content: flex-end; }
 
 .weekday-picker { display: flex; flex-wrap: wrap; gap: 6px; }
 .weekday-chip {
@@ -562,6 +571,34 @@ body {
 .punch-sheet-total { font-weight: 700; }
 .punch-sheet-diff.positive { color: var(--success); font-weight: 700; }
 .punch-sheet-diff.negative { color: var(--danger); font-weight: 700; }
+
+/* --- ponto: histórico de todos os colaboradores no mês (admin), estilo
+   Excel — nome fixo na coluna da esquerda, cabeçalho de dias fixo no topo,
+   um dia por coluna. --- */
+.users-history-panel { max-width: 96vw; width: 96vw; }
+.users-history-scroll { overflow: auto; border: 1px solid var(--border); border-radius: 10px; max-height: 68vh; }
+.users-history-table { border-collapse: collapse; font-size: 11.5px; }
+.users-history-table th,
+.users-history-table td {
+  padding: 6px 9px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+  text-align: center; vertical-align: middle; white-space: nowrap;
+}
+.users-history-table th {
+  position: sticky; top: 0; background: var(--panel-2); color: var(--text-muted);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; z-index: 1;
+}
+.users-history-table td:first-child,
+.users-history-table th:first-child {
+  position: sticky; left: 0; text-align: left; font-weight: 600; min-width: 130px;
+}
+.users-history-table td:first-child { background: var(--panel); z-index: 1; }
+.users-history-table th:first-child { z-index: 2; }
+.users-history-table th.weekend, .users-history-table td.weekend { background: var(--panel-2); }
+.users-history-table th.holiday, .users-history-table td.holiday { background: var(--danger-soft); }
+.users-history-punches { display: flex; flex-direction: column; gap: 1px; font-size: 10.5px; color: var(--text-muted); line-height: 1.4; }
+.users-history-summary { font-weight: 700; }
+.users-history-summary.positive { color: var(--success); }
+.users-history-summary.negative { color: var(--danger); }
 
 /* --- calendário: feriados e recesso --- */
 .calendar-layout { display: flex; flex-direction: column; gap: 20px; }

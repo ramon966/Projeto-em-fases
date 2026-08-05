@@ -271,23 +271,29 @@ window.PontoStore = (function () {
   }
 
   /** Expected worked minutes for every scheduled weekday from `since`
-   * (inclusive) through today (inclusive) — i.e. the target for the month
-   * so far, not the whole month ahead. `holidayDates` (a Set of "YYYY-MM-DD"
-   * strings, optional) excludes feriados/recesso even when they fall on a
-   * day the schedule would otherwise expect work. */
-  function expectedMinutes(schedule, since, holidayDates) {
+   * through `until` (both inclusive). `holidayDates` (a Set of
+   * "YYYY-MM-DD" strings, optional) excludes feriados/recesso even when
+   * they fall on a day the schedule would otherwise expect work. */
+  function expectedMinutesInRange(schedule, since, until, holidayDates) {
     const holidays = holidayDates || new Set();
-    const now = new Date();
     const day = new Date(since.getFullYear(), since.getMonth(), since.getDate());
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(until.getFullYear(), until.getMonth(), until.getDate());
     let workDays = 0;
-    while (day <= today) {
+    while (day <= end) {
       const iso = day.getDay() === 0 ? 7 : day.getDay(); // JS: 0=domingo..6=sábado → ISO: 1=segunda..7=domingo
       const dateKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
       if (schedule.weekdays.includes(iso) && !holidays.has(dateKey)) workDays++;
       day.setDate(day.getDate() + 1);
     }
     return Math.round(workDays * schedule.hoursPerDay * 60);
+  }
+
+  /** Expected worked minutes for every scheduled weekday from `since`
+   * (inclusive) through today (inclusive) — i.e. the target for the month
+   * so far, not the whole month ahead. Used for the hour bank (worked vs.
+   * expected up to now). */
+  function expectedMinutes(schedule, since, holidayDates) {
+    return expectedMinutesInRange(schedule, since, new Date(), holidayDates);
   }
 
   /** Formats a minute count (can be negative, for a debt) as "±Xh Ymin". */
@@ -319,6 +325,7 @@ window.PontoStore = (function () {
     registerPunch,
     sumWorkedMinutes,
     expectedMinutes,
+    expectedMinutesInRange,
     formatMinutes,
   };
 })();

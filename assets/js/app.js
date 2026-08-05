@@ -22,6 +22,7 @@
     registerPunch,
     sumWorkedMinutes,
     expectedMinutes,
+    expectedMinutesInRange,
     formatMinutes,
   } = window.PontoStore;
 
@@ -279,6 +280,7 @@
     if (!scheduleOverlay.hidden) closeScheduleModal();
     if (!punchEditOverlay.hidden) closePunchEditModal();
     if (!punchSheetOverlay.hidden) closePunchSheetModal();
+    if (!usersHistoryOverlay.hidden) closeUsersHistoryModal();
   });
 
   mSave.addEventListener("click", async () => {
@@ -487,11 +489,6 @@
     return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
 
-  function formatSchedule(schedule) {
-    const days = schedule.weekdays.map((d) => WEEKDAY_LABELS[d]).join(", ");
-    return `${days} · ${schedule.hoursPerDay}h/dia`;
-  }
-
   let pontoLastPunchData = null;
 
   /** Refreshes the current user's punch button label, last punch and
@@ -572,23 +569,44 @@
         pontoScheduleList.innerHTML = '<p class="empty">Nenhum colaborador cadastrado.</p>';
         return;
       }
-      pontoScheduleList.innerHTML = "";
+      // Tabela de verdade — nome, dias e horas em colunas separadas, em vez
+      // de tudo resumido numa frase só (era difícil de escanear com vários
+      // colaboradores).
+      pontoScheduleList.innerHTML = `
+        <div class="schedule-table-scroll">
+          <table class="schedule-table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Dias da semana</th>
+                <th>Horas/dia</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="ponto-schedule-tbody"></tbody>
+          </table>
+        </div>`;
+      const tbody = document.getElementById("ponto-schedule-tbody");
       users.forEach((u) => {
         const schedule = schedules[u.id] || window.PontoStore.DEFAULT_SCHEDULE;
-        const row = document.createElement("div");
-        row.className = "ponto-schedule-row";
+        const row = document.createElement("tr");
         row.innerHTML = `
-          <span class="ponto-schedule-name">${escapeHtml(u.name)}</span>
-          <span class="ponto-schedule-summary">${escapeHtml(formatSchedule(schedule))}</span>
-          <button type="button" class="icon-btn" data-action="edit-punch" title="Corrigir ponto" aria-label="Corrigir ponto de ${escapeHtml(u.name)}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          </button>
-          <button type="button" class="icon-btn" data-action="edit-schedule" title="Configurar horário" aria-label="Configurar horário de ${escapeHtml(u.name)}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
-          </button>`;
+          <td class="schedule-table-name">${escapeHtml(u.name)}</td>
+          <td>${escapeHtml(schedule.weekdays.map((d) => WEEKDAY_LABELS[d]).join(", "))}</td>
+          <td>${schedule.hoursPerDay}h</td>
+          <td>
+            <div class="schedule-table-actions">
+              <button type="button" class="icon-btn" data-action="edit-punch" title="Corrigir ponto" aria-label="Corrigir ponto de ${escapeHtml(u.name)}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </button>
+              <button type="button" class="icon-btn" data-action="edit-schedule" title="Configurar horário" aria-label="Configurar horário de ${escapeHtml(u.name)}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+              </button>
+            </div>
+          </td>`;
         row.querySelector('[data-action="edit-schedule"]').addEventListener("click", () => openScheduleModal(u, schedule));
         row.querySelector('[data-action="edit-punch"]').addEventListener("click", () => openPunchSheetModal(u));
-        pontoScheduleList.appendChild(row);
+        tbody.appendChild(row);
       });
     } catch (err) {
       console.error("Falha ao carregar horários:", err);
@@ -1041,6 +1059,122 @@
   punchSheetCloseBtn.addEventListener("click", closePunchSheetModal);
   punchSheetOverlay.addEventListener("click", (e) => {
     if (e.target === punchSheetOverlay) closePunchSheetModal();
+  });
+
+  // --- ponto: histórico de TODOS os colaboradores no mês corrente, lado a
+  // lado (admin) — tabela horizontal estilo Excel, aberta pelo botão "Ver
+  // pontos". Sempre o mês atual (sem navegação), como pedido: "esse mês de
+  // agosto deve ir do dia 1 até o último dia do mês". ---
+  const usersHistoryBtn = document.getElementById("ponto-view-history-btn");
+  const usersHistoryOverlay = document.getElementById("users-history-overlay");
+  const usersHistoryTitle = document.getElementById("users-history-title");
+  const usersHistoryThead = document.getElementById("users-history-thead");
+  const usersHistoryTbody = document.getElementById("users-history-tbody");
+  const usersHistoryError = document.getElementById("users-history-error");
+  const usersHistoryCloseBtn = document.getElementById("users-history-close");
+
+  function openUsersHistoryModal() {
+    usersHistoryOverlay.hidden = false;
+    renderUsersHistory();
+  }
+  function closeUsersHistoryModal() {
+    usersHistoryOverlay.hidden = true;
+  }
+
+  async function renderUsersHistory() {
+    usersHistoryError.textContent = "";
+    usersHistoryThead.innerHTML = "";
+    usersHistoryTbody.innerHTML = '<tr><td class="empty">Carregando…</td></tr>';
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth(); // 0-based
+      const monthStart = new Date(year, month, 1);
+      const monthEnd = new Date(year, month + 1, 1); // exclusivo
+      const lastDay = new Date(year, month + 1, 0);
+      const totalDays = lastDay.getDate();
+      usersHistoryTitle.textContent = `Ponto dos colaboradores — ${MONTH_NAMES[month]} de ${year}`;
+
+      const holidays = await getHolidaysInRange(monthStart, monthEnd);
+      const holidayByDate = {};
+      holidays.forEach((h) => {
+        holidayByDate[h.date] = h;
+      });
+      const holidayDates = new Set(holidays.map((h) => h.date));
+
+      const dayKey = (day) => `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+      // Cabeçalho: nome + um dia por coluna + as duas colunas de resumo.
+      const headCells = ["<th>Nome</th>"];
+      for (let day = 1; day <= totalDays; day++) {
+        const date = new Date(year, month, day);
+        const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+        const holiday = holidayByDate[dayKey(day)];
+        const cls = holiday ? "holiday" : isWeekend ? "weekend" : "";
+        headCells.push(
+          `<th class="${cls}"${holiday ? ` title="${escapeHtml(holiday.name)}"` : ""}>${String(day).padStart(2, "0")}</th>`
+        );
+      }
+      headCells.push("<th>Restante no mês</th>", "<th>Banco de horas</th>");
+      usersHistoryThead.innerHTML = `<tr>${headCells.join("")}</tr>`;
+
+      if (users.length === 0) {
+        usersHistoryTbody.innerHTML = '<tr><td class="empty">Nenhum colaborador cadastrado.</td></tr>';
+        return;
+      }
+
+      // Uma consulta de escala + batidas por colaborador, em paralelo.
+      const rows = await Promise.all(
+        users.map(async (u) => {
+          const [schedule, punches] = await Promise.all([getSchedule(u.id), getPunchesForRange(u.id, monthStart, monthEnd)]);
+          const byDay = {};
+          punches.forEach((p) => {
+            const d = new Date(p.punchedAt);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            (byDay[key] || (byDay[key] = [])).push(p);
+          });
+          const workedMinutes = sumWorkedMinutes(punches);
+          const expectedSoFar = expectedMinutes(schedule, monthStart, holidayDates);
+          const expectedFullMonth = expectedMinutesInRange(schedule, monthStart, lastDay, holidayDates);
+          const bank = workedMinutes - expectedSoFar;
+          const remaining = Math.max(0, expectedFullMonth - workedMinutes);
+          return { user: u, byDay, bank, remaining };
+        })
+      );
+
+      usersHistoryTbody.innerHTML = "";
+      rows.forEach(({ user: u, byDay, bank, remaining }) => {
+        const cells = [`<td>${escapeHtml(u.name)}</td>`];
+        for (let day = 1; day <= totalDays; day++) {
+          const key = dayKey(day);
+          const dayPunches = (byDay[key] || []).slice().sort((a, b) => new Date(a.punchedAt) - new Date(b.punchedAt));
+          const date = new Date(year, month, day);
+          const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+          const cls = holidayByDate[key] ? "holiday" : isWeekend ? "weekend" : "";
+          const content = dayPunches.length
+            ? `<div class="users-history-punches">${dayPunches.map((p) => escapeHtml(toTimeInputValue(p.punchedAt))).join("<br>")}</div>`
+            : "—";
+          cells.push(`<td class="${cls}">${content}</td>`);
+        }
+        cells.push(
+          `<td class="users-history-summary">${formatMinutes(remaining)}</td>`,
+          `<td class="users-history-summary ${bank >= 0 ? "positive" : "negative"}">${(bank >= 0 ? "+" : "") + formatMinutes(bank)}</td>`
+        );
+        const row = document.createElement("tr");
+        row.innerHTML = cells.join("");
+        usersHistoryTbody.appendChild(row);
+      });
+    } catch (err) {
+      console.error("Falha ao carregar histórico de ponto:", err);
+      usersHistoryError.textContent = "Não foi possível carregar o histórico.";
+      usersHistoryTbody.innerHTML = '<tr><td class="empty">Não foi possível carregar.</td></tr>';
+    }
+  }
+
+  usersHistoryBtn.addEventListener("click", openUsersHistoryModal);
+  usersHistoryCloseBtn.addEventListener("click", closeUsersHistoryModal);
+  usersHistoryOverlay.addEventListener("click", (e) => {
+    if (e.target === usersHistoryOverlay) closeUsersHistoryModal();
   });
 
   // --- calendário: feriados e recesso de 2026/2027 (assets/js/ponto-store.js

@@ -160,6 +160,19 @@ gestão (escala + planilha + justificativas), descrito abaixo.
   lado a lado e total/esperado/diferença calculados na hora. Dá pra
   navegar entre meses. Correção de admin não exige justificativa.
 
+**Ver pontos** (botão ao lado de "Horário e correção..."): abre um
+modal com o ponto de **todos os colaboradores ao mesmo tempo**, mês
+corrente (dia 1 até o último dia do mês), numa tabela horizontal —
+nome fixo na coluna da esquerda, um dia por coluna (com os horários
+batidos), cabeçalho e coluna de nome fixos ao rolar (estilo planilha).
+Fins de semana ficam com fundo diferente e feriados aparecem
+destacados. Duas colunas de resumo por colaborador:
+
+- **Restante no mês** — quanto ainda falta trabalhar para bater a meta
+  do mês inteiro (nunca fica negativo; se já bateu a meta, mostra 0h).
+- **Banco de horas** — a mesma métrica de crédito/débito do resumo
+  pessoal (trabalhado vs. esperado até hoje).
+
 ## Calendário (feriados, recesso e aniversários)
 
 Menu "Calendário" na sidebar, visível para qualquer colaborador logado
