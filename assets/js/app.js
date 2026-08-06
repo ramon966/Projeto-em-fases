@@ -16,7 +16,6 @@
     addCorrection,
     getCorrections,
     getHolidaysInRange,
-    getHolidaysForYear,
     getBirthdays,
     nextPunchType,
     registerPunch,
@@ -1177,93 +1176,237 @@
     if (e.target === usersHistoryOverlay) closeUsersHistoryModal();
   });
 
-  // --- calendário: feriados e recesso de 2026/2027 (assets/js/ponto-store.js
-  // é quem sabe da tabela; aqui só listamos e agrupamos dias seguidos). ---
-  const calendarList2026 = document.getElementById("calendar-list-2026");
-  const calendarList2027 = document.getElementById("calendar-list-2027");
+  // --- calendário: grade mensal/semanal/diária com feriados, recesso e
+  // aniversários da equipe marcados nos dias certos. Os dados em si vêm de
+  // window.CalendarData via getHolidaysInRange/getBirthdays
+  // (assets/js/ponto-store.js) — aqui é só a grade e a navegação entre
+  // mês/semana/dia; nada disso mexe no cálculo de horas. ---
+  const calTitleEl = document.getElementById("cal-title");
+  const calBodyEl = document.getElementById("cal-body");
+  const calPrevBtn = document.getElementById("cal-prev");
+  const calNextBtn = document.getElementById("cal-next");
+  const calTodayBtn = document.getElementById("cal-today-btn");
+  const calViewBtns = document.querySelectorAll("#cal-view-switch [data-cal-view]");
+
   const MONTH_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const WEEKDAY_FULL = [
+    "domingo", "segunda-feira", "terça-feira", "quarta-feira",
+    "quinta-feira", "sexta-feira", "sábado",
+  ];
+  const CAL_HOUR_HEIGHT = 48; // px — tem que bater com .cal-hour-line/.cal-hour-label no CSS
+
+  let calView = "month"; // "month" | "week" | "day"
+  let calAnchor = new Date(); // dia de referência: o que aparece depende dele + calView
 
   function parseDateOnly(dateStr) {
     const [y, m, d] = dateStr.split("-").map(Number);
     return new Date(y, m - 1, d);
   }
+  function dateKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+  function sameDay(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+  function addDays(date, n) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + n);
+    return d;
+  }
+  function startOfWeek(date) {
+    return addDays(date, -date.getDay()); // domingo primeiro, igual ao resto do app
+  }
 
-  /** Merges consecutive calendar dates with the same name/type into one
-   * range (e.g. 6 separate "Recesso" rows becomes one "19–24 dez" row) —
-   * purely a display grouping, the underlying rows stay one-per-day. */
-  function groupConsecutiveHolidays(holidays) {
-    const groups = [];
-    holidays.forEach((h) => {
-      const date = parseDateOnly(h.date);
-      const last = groups[groups.length - 1];
-      if (last && last.name === h.name && last.type === h.type) {
-        const nextDay = new Date(last.end);
-        nextDay.setDate(nextDay.getDate() + 1);
-        if (nextDay.getTime() === date.getTime()) {
-          last.end = date;
-          return;
-        }
-      }
-      groups.push({ start: date, end: date, name: h.name, type: h.type });
+  /** Projeta os aniversários da equipe (mês/dia sem ano) em cada ano tocado
+   * pelo intervalo [start, end) — uma semana na virada do ano cruza dois
+   * anos, por isso não dá pra assumir um ano só. */
+  function birthdaysInRange(start, end) {
+    const birthdays = getBirthdays();
+    const out = [];
+    for (let year = start.getFullYear(); year <= end.getFullYear(); year++) {
+      birthdays.forEach((b) => {
+        const date = new Date(year, b.month - 1, b.day);
+        if (date >= start && date < end) out.push({ date, name: b.name, type: "aniversario" });
+      });
+    }
+    return out;
+  }
+
+  /** Feriados/recesso + aniversários no intervalo [start, end), agrupados
+   * por dia (chave yyyy-mm-dd) — alimenta as três visões do calendário. */
+  function calEventsByDay(start, end) {
+    const byDay = {};
+    const push = (key, ev) => (byDay[key] || (byDay[key] = [])).push(ev);
+    getHolidaysInRange(start, end).forEach((h) => push(h.date, { name: h.name, type: h.type }));
+    birthdaysInRange(start, end).forEach((b) => push(dateKey(b.date), { name: b.name, type: b.type }));
+    return byDay;
+  }
+
+  function calChipLabel(ev) {
+    return ev.type === "aniversario" ? `🎂 ${ev.name}` : ev.name;
+  }
+  function calChipTitle(ev) {
+    if (ev.type === "aniversario") return `Aniversário de ${ev.name}`;
+    if (ev.type === "recesso") return `${ev.name} (recesso)`;
+    return `${ev.name} (feriado)`;
+  }
+
+  /** Clicar num dia no mês pula direto pra visão "Dia" daquela data —
+   * conveniência pra ler o nome completo dos eventos sem precisar truncar. */
+  function goToDay(date) {
+    calAnchor = date;
+    calView = "day";
+    calViewBtns.forEach((b) => b.classList.toggle("active", b.dataset.calView === "day"));
+    renderCalendarPage();
+  }
+
+  function renderMonthView(today) {
+    const year = calAnchor.getFullYear();
+    const month = calAnchor.getMonth();
+    const gridStart = startOfWeek(new Date(year, month, 1));
+    const byDay = calEventsByDay(gridStart, addDays(gridStart, 42));
+
+    const head = WEEKDAY_SHORT.map((w) => `<span class="cal-weekday">${w}</span>`).join("");
+    const cells = [];
+    for (let i = 0; i < 42; i++) {
+      const date = addDays(gridStart, i);
+      const key = dateKey(date);
+      const events = byDay[key] || [];
+      const shown = events.slice(0, 3);
+      const extra = events.length - shown.length;
+      const cls = ["cal-day-cell", "clickable", date.getMonth() !== month ? "out" : "", sameDay(date, today) ? "today" : ""]
+        .filter(Boolean)
+        .join(" ");
+      cells.push(`
+        <div class="${cls}" data-date="${key}">
+          <span class="cal-day-num">${date.getDate()}</span>
+          <div class="cal-day-events">
+            ${shown.map((ev) => `<span class="cal-chip ${ev.type}" title="${escapeHtml(calChipTitle(ev))}">${escapeHtml(calChipLabel(ev))}</span>`).join("")}
+            ${extra > 0 ? `<span class="cal-chip-more">+${extra}</span>` : ""}
+          </div>
+        </div>`);
+    }
+
+    calBodyEl.innerHTML = `
+      <div class="cal-month">
+        <div class="cal-month-headrow">${head}</div>
+        <div class="cal-month-grid">${cells.join("")}</div>
+      </div>`;
+    calBodyEl.querySelectorAll(".cal-day-cell[data-date]").forEach((cell) => {
+      cell.addEventListener("click", () => goToDay(parseDateOnly(cell.dataset.date)));
     });
-    return groups;
   }
 
-  function formatCalendarDate(group) {
-    const p = (n) => String(n).padStart(2, "0");
-    const label = (d) => `${p(d.getDate())} ${MONTH_SHORT[d.getMonth()]}`;
-    if (group.start.getTime() === group.end.getTime()) return label(group.start);
-    return `${label(group.start)} – ${label(group.end)}`;
-  }
+  /** Grade de horas usada tanto pela visão Semana (7 colunas) quanto Dia (1
+   * coluna) — feriados/recesso/aniversários são o dia inteiro, então entram
+   * numa faixa "dia inteiro" acima da grade, igual Google Calendar. */
+  function renderTimeGrid(days, today) {
+    const start = days[0];
+    const end = addDays(days[days.length - 1], 1);
+    const byDay = calEventsByDay(start, end);
 
-  const CALENDAR_BADGE_LABELS = { feriado: "Feriado", recesso: "Recesso", aniversario: "🎂 Aniversário" };
-
-  /** Projects each team birthday (month/day only, no year) onto a specific
-   * calendar year, so it can be merged and sorted alongside that year's
-   * holidays. Purely a display concern — birthdays never touch hour calcs. */
-  function birthdaysForYear(birthdays, year) {
-    return birthdays.map((b) => ({
-      date: `${year}-${String(b.month).padStart(2, "0")}-${String(b.day).padStart(2, "0")}`,
-      name: `Aniversário de ${b.name}`,
-      type: "aniversario",
-    }));
-  }
-
-  function renderCalendarList(container, entries) {
-    if (entries.length === 0) {
-      container.innerHTML = '<p class="empty">Nenhum evento cadastrado.</p>';
-      return;
-    }
-    const sorted = entries.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-    container.innerHTML = groupConsecutiveHolidays(sorted)
-      .map(
-        (g) => `
-        <div class="calendar-row">
-          <span class="calendar-date">${escapeHtml(formatCalendarDate(g))}</span>
-          <span class="calendar-name">${escapeHtml(g.name)}</span>
-          <span class="calendar-badge ${g.type}">${CALENDAR_BADGE_LABELS[g.type]}</span>
-        </div>`
-      )
+    const headCols = days
+      .map((d) => {
+        const isToday = sameDay(d, today);
+        return `<div class="cal-day-col-head${isToday ? " today" : ""}">${String(d.getDate()).padStart(2, "0")} ${WEEKDAY_SHORT[d.getDay()].toLowerCase()}</div>`;
+      })
       .join("");
+
+    const alldayCols = days
+      .map((d) => {
+        const isToday = sameDay(d, today);
+        const events = byDay[dateKey(d)] || [];
+        return `
+        <div class="cal-allday-col${isToday ? " today" : ""}">
+          ${events.map((ev) => `<span class="cal-chip ${ev.type}" title="${escapeHtml(calChipTitle(ev))}">${escapeHtml(calChipLabel(ev))}</span>`).join("")}
+        </div>`;
+      })
+      .join("");
+
+    const hourLabels = Array.from({ length: 24 }, (_, h) => `<div class="cal-hour-label">${String(h).padStart(2, "0")}:00</div>`).join("");
+    const dayCols = days
+      .map((d) => {
+        const lines = Array.from({ length: 24 }, () => `<div class="cal-hour-line"></div>`).join("");
+        const isToday = sameDay(d, today);
+        const nowLine = isToday
+          ? `<div class="cal-now-line" style="top:${((today.getHours() * 60 + today.getMinutes()) / 60) * CAL_HOUR_HEIGHT}px"></div>`
+          : "";
+        return `<div class="cal-day-col${isToday ? " today" : ""}">${lines}${nowLine}</div>`;
+      })
+      .join("");
+
+    calBodyEl.innerHTML = `
+      <div class="cal-timegrid">
+        <div class="cal-timegrid-head">
+          <div class="cal-time-gutter"></div>
+          ${headCols}
+        </div>
+        <div class="cal-allday-row">
+          <div class="cal-time-gutter"></div>
+          ${alldayCols}
+        </div>
+        <div class="cal-timegrid-body" id="cal-timegrid-body">
+          <div class="cal-hour-labels">${hourLabels}</div>
+          ${dayCols}
+        </div>
+      </div>`;
+
+    // Abre já rolado pra manhã (07:00), igual ao resto do app trabalha.
+    document.getElementById("cal-timegrid-body").scrollTop = 7 * CAL_HOUR_HEIGHT;
   }
 
-  async function renderCalendarPage() {
-    calendarList2026.innerHTML = '<p class="empty">Carregando…</p>';
-    calendarList2027.innerHTML = '<p class="empty">Carregando…</p>';
-    try {
-      const [h2026, h2027, birthdays] = await Promise.all([
-        getHolidaysForYear(2026),
-        getHolidaysForYear(2027),
-        getBirthdays(),
-      ]);
-      renderCalendarList(calendarList2026, [...h2026, ...birthdaysForYear(birthdays, 2026)]);
-      renderCalendarList(calendarList2027, [...h2027, ...birthdaysForYear(birthdays, 2027)]);
-    } catch (err) {
-      console.error("Falha ao carregar calendário:", err);
-      calendarList2026.innerHTML = '<p class="empty">Não foi possível carregar o calendário.</p>';
-      calendarList2027.innerHTML = '<p class="empty">Não foi possível carregar o calendário.</p>';
+  function renderWeekView(today) {
+    const weekStart = startOfWeek(calAnchor);
+    renderTimeGrid(Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), today);
+  }
+  function renderDayView(today) {
+    renderTimeGrid([new Date(calAnchor)], today);
+  }
+
+  function updateCalTitle() {
+    const p = (n) => String(n).padStart(2, "0");
+    if (calView === "month") {
+      calTitleEl.textContent = `${MONTH_NAMES[calAnchor.getMonth()].toLowerCase()} ${calAnchor.getFullYear()}`;
+    } else if (calView === "week") {
+      const weekStart = startOfWeek(calAnchor);
+      const weekEnd = addDays(weekStart, 6);
+      calTitleEl.textContent =
+        weekStart.getMonth() === weekEnd.getMonth()
+          ? `${MONTH_NAMES[weekStart.getMonth()].toLowerCase()} ${p(weekStart.getDate())} – ${p(weekEnd.getDate())}`
+          : `${MONTH_SHORT[weekStart.getMonth()]} ${p(weekStart.getDate())} – ${MONTH_SHORT[weekEnd.getMonth()]} ${p(weekEnd.getDate())}`;
+    } else {
+      calTitleEl.textContent = `${WEEKDAY_FULL[calAnchor.getDay()]} ${MONTH_SHORT[calAnchor.getMonth()]} ${p(calAnchor.getDate())}`;
     }
   }
+
+  function renderCalendarPage() {
+    const today = new Date();
+    updateCalTitle();
+    if (calView === "month") renderMonthView(today);
+    else if (calView === "week") renderWeekView(today);
+    else renderDayView(today);
+  }
+
+  function navigateCal(delta) {
+    if (calView === "month") calAnchor = new Date(calAnchor.getFullYear(), calAnchor.getMonth() + delta, 1);
+    else if (calView === "week") calAnchor = addDays(calAnchor, delta * 7);
+    else calAnchor = addDays(calAnchor, delta);
+    renderCalendarPage();
+  }
+
+  calPrevBtn.addEventListener("click", () => navigateCal(-1));
+  calNextBtn.addEventListener("click", () => navigateCal(1));
+  calTodayBtn.addEventListener("click", () => {
+    calAnchor = new Date();
+    renderCalendarPage();
+  });
+  calViewBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      calView = btn.dataset.calView;
+      calViewBtns.forEach((b) => b.classList.toggle("active", b === btn));
+      renderCalendarPage();
+    });
+  });
 
   // --- initial load: fetch users from Supabase, then restore session (if
   // any) so refreshing the page doesn't log you out ---

@@ -176,10 +176,12 @@ destacados. Duas colunas de resumo por colaborador:
 ## Calendário (feriados, recesso e aniversários)
 
 Menu "Calendário" na sidebar, visível para qualquer colaborador logado
-(informativo — não é restrito a Admin). Lista os feriados de 2026 e
-2027 junto com os aniversários da equipe, tudo em ordem cronológica,
-com dias seguidos do mesmo tipo agrupados numa faixa (ex.: "19–24 dez —
-Recesso de fim de ano") para ficar mais fácil de ler.
+(informativo — não é restrito a Admin). Uma grade de calendário de
+verdade — visões **Mês**, **Semana** e **Dia**, navegação com as setas
+e um botão **Hoje** que volta pro dia atual — com feriados, recesso e
+aniversários da equipe marcados direto no dia certo (chip colorido por
+tipo; na visão Mês, clicar num dia abre a visão Dia daquela data pra
+ler o nome completo). Sem visão "Agenda" (lista cronológica) por ora.
 
 **Dados fixos no front-end, não no Supabase** — feriados e aniversários
 mudam raramente (uma vez por ano, ou quando alguém entra/sai da
