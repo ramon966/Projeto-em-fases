@@ -409,23 +409,25 @@
 
     <div class="punch-edit-list" id="punch-edit-list"></div>
 
-    <button type="button" class="btn secondary punch-add-toggle" id="punch-add-toggle" aria-expanded="false" aria-controls="punch-edit-add">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="punch-add-toggle-icon"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-      Solicitar adição de batida
-    </button>
-
-    <div class="punch-edit-add" id="punch-edit-add" hidden>
-      <select id="punch-add-type">
-        <option value="entrada">Entrada</option>
-        <option value="saida_almoco">Saída (almoço)</option>
-        <option value="volta_almoco">Volta (almoço)</option>
-        <option value="saida">Saída</option>
-      </select>
-      <input id="punch-add-time" type="time" />
-      <button type="button" class="btn secondary" id="punch-add-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-        Solicitar adição
+    <div class="punch-add-toggle-wrap">
+      <button type="button" class="btn secondary punch-add-toggle" id="punch-add-toggle" aria-expanded="false" aria-controls="punch-edit-add">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="punch-add-toggle-icon"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        Solicitar adição de batida
       </button>
+
+      <div class="punch-edit-add" id="punch-edit-add" hidden>
+        <select id="punch-add-type">
+          <option value="entrada">Entrada</option>
+          <option value="saida_almoco">Saída (almoço)</option>
+          <option value="volta_almoco">Volta (almoço)</option>
+          <option value="saida">Saída</option>
+        </select>
+        <input id="punch-add-time" type="time" />
+        <button type="button" class="btn secondary" id="punch-add-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+          Solicitar adição
+        </button>
+      </div>
     </div>
 
     <div class="field">

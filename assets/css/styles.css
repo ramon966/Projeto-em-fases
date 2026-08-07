@@ -572,7 +572,11 @@ body {
 .punch-edit-add .btn { flex: none; padding: 7px 12px; font-size: 12.5px; }
 .punch-edit-add .btn svg { width: 12px; height: 12px; }
 
-.punch-add-toggle { align-self: flex-start; padding: 7px 12px; font-size: 12.5px; }
+/* Wrap fica em fluxo normal de bloco (não flex) — o botão é
+   inline-block (largo só o necessário) e o painel abaixo dele é um
+   div comum, então ocupa a largura toda sem precisar esticar nada
+   via flex. */
+.punch-add-toggle { margin-bottom: 8px; padding: 7px 12px; font-size: 12.5px; }
 .punch-add-toggle-icon { transition: transform 0.15s ease; }
 .punch-add-toggle[aria-expanded="true"] .punch-add-toggle-icon { transform: rotate(45deg); }
 
