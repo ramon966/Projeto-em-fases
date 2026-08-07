@@ -34,6 +34,18 @@ create table if not exists public.punch_corrections (
   created_at     timestamptz not null default now()
 );
 
+-- Migração pra quem já tinha a tabela antes desses campos existirem (fluxo
+-- antigo: colaborador aplicava a correção na hora e isso só registrava o
+-- log). Cada linha é um "add column if not exists" — não-op numa instalação
+-- nova, já criada com a definição acima; segura de rodar de novo sempre.
+-- Precisa vir ANTES dos `create index`/`create policy` abaixo: numa
+-- instalação já existente o `create table if not exists` acima é um no-op,
+-- então colunas como `status` só passam a existir de fato aqui.
+alter table public.punch_corrections add column if not exists punch_id bigint references public.time_punches(id) on delete cascade;
+alter table public.punch_corrections add column if not exists status text not null default 'pendente' check (status in ('pendente', 'aprovada', 'rejeitada'));
+alter table public.punch_corrections add column if not exists reviewed_at timestamptz;
+alter table public.punch_corrections add column if not exists reviewed_by bigint references public.users(id) on delete set null;
+
 create index if not exists punch_corrections_created_idx on public.punch_corrections (created_at desc);
 create index if not exists punch_corrections_status_idx on public.punch_corrections (status);
 
@@ -48,15 +60,6 @@ create policy "Prototype: allow anon full access"
   to anon
   using (true)
   with check (true);
-
--- Migração pra quem já tinha a tabela antes desses campos existirem (fluxo
--- antigo: colaborador aplicava a correção na hora e isso só registrava o
--- log). Cada linha é um "add column if not exists" — não-op numa instalação
--- nova, já criada com a definição acima; segura de rodar de novo sempre.
-alter table public.punch_corrections add column if not exists punch_id bigint references public.time_punches(id) on delete cascade;
-alter table public.punch_corrections add column if not exists status text not null default 'pendente' check (status in ('pendente', 'aprovada', 'rejeitada'));
-alter table public.punch_corrections add column if not exists reviewed_at timestamptz;
-alter table public.punch_corrections add column if not exists reviewed_by bigint references public.users(id) on delete set null;
 
 -- BACKFILL (rodar só uma vez, junto com a migração acima — NÃO rode este
 -- bloco de novo depois que colaboradores já estiverem enviando pedidos de

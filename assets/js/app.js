@@ -732,11 +732,12 @@
   const punchEditOverlay = document.getElementById("punch-edit-overlay");
   const punchEditDateInput = document.getElementById("punch-edit-date");
   const punchEditList = document.getElementById("punch-edit-list");
+  const punchAddToggle = document.getElementById("punch-add-toggle");
+  const punchEditAdd = document.getElementById("punch-edit-add");
   const punchAddType = document.getElementById("punch-add-type");
   const punchAddTime = document.getElementById("punch-add-time");
   const punchAddBtn = document.getElementById("punch-add-btn");
   const punchEditJustification = document.getElementById("punch-edit-justification");
-  const punchEditError = document.getElementById("punch-edit-error");
   const punchEditInfo = document.getElementById("punch-edit-info");
   const punchEditRequests = document.getElementById("punch-edit-requests");
   const punchEditCloseBtn = document.getElementById("punch-edit-close");
@@ -771,20 +772,27 @@
   function requireJustification() {
     const text = punchEditJustification.value.trim();
     if (!text) {
-      punchEditError.textContent = "Escreva uma justificativa antes de salvar.";
       return null;
     }
     return text;
   }
 
+  /** Mostra/esconde o formulário "Solicitar adição" atrás do botão "+" —
+   * fica fechado por padrão pra não competir visualmente com a lista de
+   * batidas do dia, que é o motivo mais comum de abrir o modal. */
+  function setPunchAddExpanded(expanded) {
+    punchEditAdd.hidden = !expanded;
+    punchAddToggle.setAttribute("aria-expanded", String(expanded));
+  }
+
   async function openPunchEditModal() {
     if (!currentUser) return;
-    punchEditError.textContent = "";
     punchEditInfo.textContent = "";
     punchEditJustification.value = "";
     punchEditDateInput.value = todayInputValue();
     punchAddType.value = "entrada";
     punchAddTime.value = "";
+    setPunchAddExpanded(false);
     punchEditOverlay.hidden = false;
     await loadMyCorrections();
     await renderPunchEditList();
@@ -844,7 +852,16 @@
           }`;
         row.querySelector(".punch-row-type").value = p.type;
         if (!isPending) {
-          row.querySelector('[data-action="save"]').addEventListener("click", () => requestPunchEdit(row, p));
+          row.querySelector('[data-action="save"]').addEventListener("click", () => {
+            // Espelha o tipo/horário dessa batida no formulário de cima
+            // ("Solicitar adição") só pra revisão visual antes de enviar —
+            // quem de fato salva a edição continuam sendo os inputs da
+            // própria linha, abaixo.
+            punchAddType.value = row.querySelector(".punch-row-type").value;
+            punchAddTime.value = row.querySelector(".punch-row-time").value;
+            setPunchAddExpanded(true);
+            requestPunchEdit(row, p);
+          });
           row.querySelector('[data-action="delete"]').addEventListener("click", () => requestPunchDelete(p));
         }
         punchEditList.appendChild(row);
@@ -893,6 +910,21 @@
       myRequestsExpanded = !myRequestsExpanded;
       renderMyRequests();
     });
+
+    // Mostra no máximo 2 solicitações de cada vez — o resto rola dentro da
+    // lista. Calculado a partir da altura real das duas primeiras linhas
+    // (em vez de um valor fixo em px) porque o texto varia de tamanho; só
+    // dá pra medir enquanto a lista está visível (não "hidden").
+    if (myRequestsExpanded) {
+      const list = punchEditRequests.querySelector(".ponto-corrections-list");
+      const rows = list.querySelectorAll(".ponto-correction-row");
+      if (rows.length > 2) {
+        const gap = 10; // precisa casar com o `gap` de .ponto-corrections-list no CSS
+        list.style.maxHeight = `${rows[0].offsetHeight + gap + rows[1].offsetHeight}px`;
+      } else {
+        list.style.maxHeight = "";
+      }
+    }
   }
 
   /** Reloads pending state (per-punch + "Minhas solicitações") after a
@@ -910,12 +942,10 @@
     const type = row.querySelector(".punch-row-type").value;
     const time = row.querySelector(".punch-row-time").value;
     if (!time) {
-      punchEditError.textContent = "Informe um horário válido.";
       return;
     }
     const justification = requireJustification();
     if (!justification) return;
-    punchEditError.textContent = "";
     try {
       const punchedAt = combineDateAndTime(punchEditDateInput.value, time);
       await addCorrection({
@@ -931,14 +961,12 @@
       await afterCorrectionSubmitted("Pedido de edição enviado — aguardando aprovação do admin.");
     } catch (err) {
       console.error("Falha ao enviar pedido de edição:", err);
-      punchEditError.textContent = "Não foi possível enviar o pedido.";
     }
   }
 
   async function requestPunchDelete(punch) {
     const justification = requireJustification();
     if (!justification) return;
-    punchEditError.textContent = "";
     try {
       await addCorrection({
         userId: currentUser.id,
@@ -953,21 +981,19 @@
       await afterCorrectionSubmitted("Pedido de exclusão enviado — aguardando aprovação do admin.");
     } catch (err) {
       console.error("Falha ao enviar pedido de exclusão:", err);
-      punchEditError.textContent = "Não foi possível enviar o pedido.";
     }
   }
 
   pontoCorrectBtn.addEventListener("click", openPunchEditModal);
   punchEditDateInput.addEventListener("change", renderPunchEditList);
+  punchAddToggle.addEventListener("click", () => setPunchAddExpanded(punchEditAdd.hidden));
   punchAddBtn.addEventListener("click", async () => {
     const time = punchAddTime.value;
     if (!time) {
-      punchEditError.textContent = "Informe um horário para a nova batida.";
       return;
     }
     const justification = requireJustification();
     if (!justification) return;
-    punchEditError.textContent = "";
     punchAddBtn.disabled = true;
     try {
       const punchedAt = combineDateAndTime(punchEditDateInput.value, time);
@@ -985,7 +1011,6 @@
       await afterCorrectionSubmitted("Pedido de adição enviado — aguardando aprovação do admin.");
     } catch (err) {
       console.error("Falha ao enviar pedido de adição:", err);
-      punchEditError.textContent = "Não foi possível enviar o pedido.";
     } finally {
       punchAddBtn.disabled = false;
     }
