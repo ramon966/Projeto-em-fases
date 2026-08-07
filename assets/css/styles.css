@@ -569,6 +569,7 @@ body {
   border: 1px solid var(--border); background: var(--panel); color: var(--text);
 }
 .punch-edit-add { background: none; border: 1px dashed var(--border-strong); }
+.punch-edit-add[hidden] { display: none; }
 .punch-edit-add .btn { flex: none; padding: 7px 12px; font-size: 12.5px; }
 .punch-edit-add .btn svg { width: 12px; height: 12px; }
 
