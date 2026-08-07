@@ -572,13 +572,9 @@ body {
 .punch-edit-add .btn { flex: none; padding: 7px 12px; font-size: 12.5px; }
 .punch-edit-add .btn svg { width: 12px; height: 12px; }
 
-.punch-add-toggle-row { display: flex; align-items: center; gap: 6px; }
-.punch-add-toggle { flex: none; }
+.punch-add-toggle { align-self: flex-start; padding: 7px 12px; font-size: 12.5px; }
 .punch-add-toggle-icon { transition: transform 0.15s ease; }
 .punch-add-toggle[aria-expanded="true"] .punch-add-toggle-icon { transform: rotate(45deg); }
-.punch-add-toggle-label {
-  font-size: 12px; color: var(--text-muted); cursor: pointer; user-select: none;
-}
 
 /* --- ponto: planilha mensal (admin), estilo Excel — uma linha por dia do
    mês corrente de verdade (28-31 dias conforme o mês/ano) --- */
