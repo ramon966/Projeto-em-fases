@@ -68,6 +68,8 @@
       </span>
     </button>
 
+    <hr class="sidebar-divider" />
+
     <nav class="sidebar-nav">
       <button type="button" class="sidebar-nav-item" data-nav="dashboard" title="Dashboard">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect width="7" height="9" x="3" y="3" rx="1.3"/><rect width="7" height="5" x="14" y="3" rx="1.3"/><rect width="7" height="9" x="14" y="12" rx="1.3"/><rect width="7" height="5" x="3" y="16" rx="1.3"/></svg>
@@ -88,6 +90,7 @@
     </nav>
 
     <div class="sidebar-footer">
+      <hr class="sidebar-divider" />
       <button type="button" class="sidebar-action sidebar-toggle" id="sidebar-toggle" aria-label="Recolher menu" title="Recolher menu">
         <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>
         <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></svg>
@@ -186,31 +189,34 @@
              (com justificativa). Admin não bate ponto — esse card fica
              escondido pra quem tem cargo Admin (ver applyPermissions em app.js). -->
         <div class="ponto-card" id="ponto-personal-card">
-          <button type="button" class="btn block ponto-punch-btn" id="ponto-punch-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            <span id="ponto-punch-label">Bater entrada</span>
-          </button>
-          <p class="error-msg" id="ponto-punch-error"></p>
+          <div class="ponto-card-layout">
+            <div class="ponto-stats">
+              <div class="ponto-stat">
+                <span class="ponto-stat-label">Último ponto</span>
+                <span class="ponto-stat-value" id="ponto-last-punch">—</span>
+              </div>
+              <div class="ponto-stat">
+                <span class="ponto-stat-label">Horas no mês</span>
+                <span class="ponto-stat-value" id="ponto-worked-hours">—</span>
+              </div>
+              <div class="ponto-stat">
+                <span class="ponto-stat-label">Banco de horas</span>
+                <span class="ponto-stat-value" id="ponto-hour-bank">—</span>
+              </div>
+            </div>
 
-          <div class="ponto-stats">
-            <div class="ponto-stat">
-              <span class="ponto-stat-label">Último ponto</span>
-              <span class="ponto-stat-value" id="ponto-last-punch">—</span>
-            </div>
-            <div class="ponto-stat">
-              <span class="ponto-stat-label">Horas no mês</span>
-              <span class="ponto-stat-value" id="ponto-worked-hours">—</span>
-            </div>
-            <div class="ponto-stat">
-              <span class="ponto-stat-label">Banco de horas</span>
-              <span class="ponto-stat-value" id="ponto-hour-bank">—</span>
+            <div class="ponto-actions">
+              <button type="button" class="btn block ponto-punch-btn" id="ponto-punch-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span id="ponto-punch-label">Bater entrada</span>
+              </button>
+              <button type="button" class="btn secondary ponto-correct-btn" id="ponto-correct-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+                Solicitar correção
+              </button>
             </div>
           </div>
-
-          <button type="button" class="btn secondary ponto-correct-btn" id="ponto-correct-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
-            Solicitar correção
-          </button>
+          <p class="error-msg" id="ponto-punch-error"></p>
         </div>
 
         <!-- Admin: não bate ponto, só gerencia — escala + planilha de correção
@@ -244,10 +250,7 @@
         </span>
         <span class="picker-title">Calendário</span>
       </div>
-      <p class="picker-hint">
-        Feriados, recesso e aniversários da equipe aparecem direto nos dias do
-        calendário — feriados e recesso não contam como esperado no cálculo de horas.
-      </p>
+      <p class="picker-hint">&nbsp;</p>
 
       <div class="cal-card">
         <div class="cal-toolbar">

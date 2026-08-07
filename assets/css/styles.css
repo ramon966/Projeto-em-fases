@@ -192,6 +192,7 @@ body {
 .sidebar-wordmark { display: flex; flex-direction: column; line-height: 1.2; white-space: nowrap; }
 .sidebar-wordmark-main { font-size: 13px; font-weight: 800; letter-spacing: 0.01em; color: var(--text); }
 .sidebar-wordmark-sub { font-size: 10px; font-weight: 700; letter-spacing: 0.18em; color: var(--accent); margin-top: 2px; }
+.sidebar-divider { width: 100%; border: none; border-top: 1px solid var(--border); margin: 0; flex: none; }
 .sidebar-nav { display: flex; flex-direction: column; gap: 4px; }
 .sidebar-nav-item {
   display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 9px;
@@ -240,6 +241,9 @@ body {
   .sidebar-nav { flex-direction: row; }
   .sidebar-footer { flex-direction: row; margin-top: 0; }
   .sidebar-toggle { display: none; }
+  /* Linhas horizontais não fazem sentido na barra virando row nesse
+     breakpoint — o gap entre os itens já separa visualmente. */
+  .sidebar-divider { display: none; }
   .content { padding: 24px 20px 40px; }
 }
 
@@ -471,11 +475,16 @@ body {
   display: flex; flex-direction: column; gap: 18px;
 }
 .ponto-card[hidden] { display: none; }
+
+/* Duas colunas: estatísticas à esquerda, ações (bater ponto + corrigir)
+   à direita — cada uma empilhada verticalmente dentro da sua coluna. */
+.ponto-card-layout { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.ponto-actions { display: flex; flex-direction: column; gap: 10px; flex: 0 0 auto; min-width: 180px; }
 .ponto-punch-btn { font-size: 15px; padding: 14px 18px; }
 .ponto-punch-btn svg { width: 16px; height: 16px; }
 
-.ponto-stats { display: flex; flex-wrap: wrap; gap: 22px; }
-.ponto-stat { display: flex; flex-direction: column; gap: 4px; flex: 1 1 140px; }
+.ponto-stats { display: flex; flex-direction: column; gap: 16px; flex: 1 1 auto; }
+.ponto-stat { display: flex; flex-direction: column; gap: 4px; }
 .ponto-stat-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); font-weight: 700; }
 .ponto-stat-value { font-size: 15px; font-weight: 700; color: var(--text); }
 .ponto-stat-value.positive { color: var(--success); }
