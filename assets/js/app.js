@@ -15,6 +15,8 @@
     deletePunch,
     addCorrection,
     getCorrections,
+    approveCorrection,
+    rejectCorrection,
     getHolidaysInRange,
     getBirthdays,
     nextPunchType,
@@ -276,6 +278,7 @@
     if (e.key !== "Escape") return;
     if (!overlay.hidden) closeModal();
     if (!confirmOverlay.hidden) closeDeleteConfirm();
+    if (!punchConfirmOverlay.hidden) closePunchConfirm();
     if (!scheduleOverlay.hidden) closeScheduleModal();
     if (!punchEditOverlay.hidden) closePunchEditModal();
     if (!punchSheetOverlay.hidden) closePunchSheetModal();
@@ -466,6 +469,7 @@
   const pontoHourBankEl = document.getElementById("ponto-hour-bank");
   const pontoScheduleList = document.getElementById("ponto-schedule-list");
   const pontoCorrectionsList = document.getElementById("ponto-corrections-list");
+  const pontoCorrectionsError = document.getElementById("ponto-corrections-error");
 
   const PUNCH_TYPES = ["entrada", "saida_almoco", "volta_almoco", "saida"];
   const PUNCH_LABELS = {
@@ -488,6 +492,19 @@
     return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
 
+  // --- formatação compartilhada de solicitações de correção de ponto —
+  // usada tanto pela lista pessoal ("minhas solicitações", no modal do
+  // colaborador) quanto pelo painel do admin ("Solicitações de correção"). ---
+  const ACTION_LABELS = { adicionada: "Adicionou", editada: "Editou", excluida: "Excluiu" };
+  const CORRECTION_STATUS_LABELS = { pendente: "Pendente", aprovada: "Aprovada", rejeitada: "Rejeitada" };
+
+  function formatCorrectionChange(c) {
+    const typeLabel = PUNCH_PAST_LABELS[c.punchType];
+    if (c.action === "adicionada") return `${typeLabel} às ${formatDateTime(c.newTime)}`;
+    if (c.action === "excluida") return `${typeLabel} que estava às ${formatDateTime(c.previousTime)}`;
+    return `${typeLabel}: ${formatDateTime(c.previousTime)} → ${formatDateTime(c.newTime)}`;
+  }
+
   let pontoLastPunchData = null;
 
   /** Refreshes the current user's punch button label, last punch and
@@ -499,7 +516,8 @@
     try {
       pontoLastPunchData = await getLastPunch(currentUser.id);
       const next = nextPunchType(pontoLastPunchData);
-      pontoPunchLabel.textContent = PUNCH_LABELS[next];
+      pontoPunchBtn.disabled = !next;
+      pontoPunchLabel.textContent = next ? PUNCH_LABELS[next] : "Ponto completo hoje";
       pontoLastPunchEl.textContent = pontoLastPunchData
         ? `${PUNCH_PAST_LABELS[pontoLastPunchData.type]} às ${formatDateTime(pontoLastPunchData.punchedAt)}`
         : "Nenhuma batida ainda";
@@ -527,19 +545,52 @@
     }
   }
 
-  pontoPunchBtn.addEventListener("click", async () => {
+  // Confirmação antes de bater o ponto — evita registrar um horário errado
+  // por um clique sem querer (diferente da correção manual, isto aqui
+  // afeta o horário exato da batida, não dá pra simplesmente reenviar com
+  // outro valor depois sem passar pelo fluxo de correção).
+  const punchConfirmOverlay = document.getElementById("punch-confirm-overlay");
+  const punchConfirmMessage = document.getElementById("punch-confirm-message");
+  const punchConfirmCancelBtn = document.getElementById("punch-confirm-cancel");
+  const punchConfirmOkBtn = document.getElementById("punch-confirm-ok");
+
+  function openPunchConfirm() {
     if (!currentUser) return;
-    pontoPunchBtn.disabled = true;
+    const type = nextPunchType(pontoLastPunchData);
+    if (!type) return; // já bateu os 4 pontos de hoje — botão deveria estar disabled, mas não custa garantir
+    const now = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    punchConfirmMessage.innerHTML = `Confirma <b>${escapeHtml(PUNCH_PAST_LABELS[type])}</b> agora, às ${p(now.getHours())}:${p(now.getMinutes())}?`;
+    punchConfirmOverlay.hidden = false;
+  }
+  function closePunchConfirm() {
+    punchConfirmOverlay.hidden = true;
+  }
+
+  pontoPunchBtn.addEventListener("click", openPunchConfirm);
+  punchConfirmCancelBtn.addEventListener("click", closePunchConfirm);
+  punchConfirmOverlay.addEventListener("click", (e) => {
+    if (e.target === punchConfirmOverlay) closePunchConfirm();
+  });
+  punchConfirmOkBtn.addEventListener("click", async () => {
+    if (!currentUser) return;
+    const type = nextPunchType(pontoLastPunchData);
+    if (!type) {
+      closePunchConfirm(); // já bateu os 4 de hoje nesse meio-tempo (outra aba, etc.)
+      return;
+    }
+    punchConfirmOkBtn.disabled = true;
     pontoPunchError.textContent = "";
     try {
-      const type = nextPunchType(pontoLastPunchData);
       await registerPunch(currentUser.id, type);
       await refreshPontoSummary();
+      closePunchConfirm();
     } catch (err) {
       console.error("Falha ao bater o ponto:", err);
       pontoPunchError.textContent = "Não foi possível registrar o ponto. Tente novamente.";
+      closePunchConfirm();
     } finally {
-      pontoPunchBtn.disabled = false;
+      punchConfirmOkBtn.disabled = false;
     }
   });
 
@@ -670,10 +721,13 @@
     }
   });
 
-  // --- ponto: correção manual do PRÓPRIO ponto (colaborador comum). Exige
-  // justificativa — o admin corrige qualquer um sem justificativa, pela
-  // planilha mensal (seção seguinte), então esse modal só existe pra quem
-  // não é admin corrigir a si mesmo. ---
+  // --- ponto: solicitar correção do PRÓPRIO ponto (colaborador comum).
+  // Nada aqui toca time_punches direto — cada ação vira uma linha pendente
+  // em punch_corrections; só o admin aprovando (painel "Solicitações de
+  // correção", mais abaixo) é que aplica de fato. Exige justificativa. O
+  // admin corrige qualquer um sem passar por aprovação, pela planilha
+  // mensal (seção seguinte) — esse modal só existe pra quem não é admin
+  // pedir uma correção da própria batida. ---
   const pontoCorrectBtn = document.getElementById("ponto-correct-btn");
   const punchEditOverlay = document.getElementById("punch-edit-overlay");
   const punchEditDateInput = document.getElementById("punch-edit-date");
@@ -683,7 +737,15 @@
   const punchAddBtn = document.getElementById("punch-add-btn");
   const punchEditJustification = document.getElementById("punch-edit-justification");
   const punchEditError = document.getElementById("punch-edit-error");
+  const punchEditInfo = document.getElementById("punch-edit-info");
+  const punchEditRequests = document.getElementById("punch-edit-requests");
   const punchEditCloseBtn = document.getElementById("punch-edit-close");
+
+  // Solicitações do usuário logado, recarregadas a cada abertura do modal e
+  // a cada envio — usadas tanto pra desenhar "Minhas solicitações" quanto
+  // pra marcar como pendente a batida que já tem um pedido em aberto (evita
+  // pedir a mesma correção duas vezes).
+  let myCorrections = [];
 
   function todayInputValue() {
     const d = new Date();
@@ -715,21 +777,37 @@
     return text;
   }
 
-  function openPunchEditModal() {
+  async function openPunchEditModal() {
     if (!currentUser) return;
     punchEditError.textContent = "";
+    punchEditInfo.textContent = "";
     punchEditJustification.value = "";
     punchEditDateInput.value = todayInputValue();
     punchAddType.value = "entrada";
     punchAddTime.value = "";
     punchEditOverlay.hidden = false;
-    renderPunchEditList();
+    await loadMyCorrections();
+    await renderPunchEditList();
+    renderMyRequests();
   }
   function closePunchEditModal() {
     punchEditOverlay.hidden = true;
   }
 
-  /** Loads and renders the current user's punches for the selected date. */
+  /** Refreshes myCorrections from the server — called on open and after
+   * every request submitted, so "pendente" state (per punch and in "Minhas
+   * solicitações") stays accurate. */
+  async function loadMyCorrections() {
+    myCorrections = await getCorrections(currentUser.id);
+  }
+  function pendingPunchIds() {
+    return new Set(myCorrections.filter((c) => c.status === "pendente" && c.punchId).map((c) => c.punchId));
+  }
+
+  /** Loads and renders the current user's punches for the selected date —
+   * read-only reference for what to request against. A punch that already
+   * has a pendente request shows a "Pendente" tag instead of the edit/
+   * delete controls, so the same correction can't be requested twice. */
   async function renderPunchEditList() {
     punchEditList.innerHTML = '<p class="empty">Carregando…</p>';
     try {
@@ -739,28 +817,36 @@
         punchEditList.innerHTML = '<p class="empty">Nenhuma batida nesse dia.</p>';
         return;
       }
+      const pendingIds = pendingPunchIds();
       punchEditList.innerHTML = "";
       punches.forEach((p) => {
+        const isPending = pendingIds.has(p.id);
         const row = document.createElement("div");
-        row.className = "punch-edit-row";
+        row.className = "punch-edit-row" + (isPending ? " pending" : "");
         row.dataset.id = p.id;
         row.innerHTML = `
-          <select class="punch-row-type">
+          <select class="punch-row-type"${isPending ? " disabled" : ""}>
             <option value="entrada">Entrada</option>
             <option value="saida_almoco">Saída (almoço)</option>
             <option value="volta_almoco">Volta (almoço)</option>
             <option value="saida">Saída</option>
           </select>
-          <input type="time" class="punch-row-time" value="${toTimeInputValue(p.punchedAt)}" />
-          <button type="button" class="icon-btn" data-action="save" title="Salvar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-          </button>
-          <button type="button" class="icon-btn danger" data-action="delete" title="Excluir">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          </button>`;
+          <input type="time" class="punch-row-time" value="${toTimeInputValue(p.punchedAt)}"${isPending ? " disabled" : ""} />
+          ${
+            isPending
+              ? `<span class="ponto-correction-status pendente">Pendente</span>`
+              : `<button type="button" class="icon-btn" data-action="save" title="Solicitar edição">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                 </button>
+                 <button type="button" class="icon-btn danger" data-action="delete" title="Solicitar exclusão">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                 </button>`
+          }`;
         row.querySelector(".punch-row-type").value = p.type;
-        row.querySelector('[data-action="save"]').addEventListener("click", () => savePunchRow(row, p));
-        row.querySelector('[data-action="delete"]').addEventListener("click", () => deletePunchRow(row, p));
+        if (!isPending) {
+          row.querySelector('[data-action="save"]').addEventListener("click", () => requestPunchEdit(row, p));
+          row.querySelector('[data-action="delete"]').addEventListener("click", () => requestPunchDelete(p));
+        }
         punchEditList.appendChild(row);
       });
     } catch (err) {
@@ -769,13 +855,58 @@
     }
   }
 
-  /** Reloads the day's list and refreshes the punch button/hour bank. */
-  async function afterPunchEditChange() {
-    await renderPunchEditList();
-    await refreshPontoSummary();
+  // Fica fechada por padrão (e some se não há nada a mostrar) — é
+  // informação de apoio, não o motivo de abrir o modal. Guardada fora da
+  // função pra sobreviver aos re-renders depois de cada pedido enviado.
+  let myRequestsExpanded = false;
+
+  /** Renders "Minhas solicitações" como um painel retrátil: todo pedido já
+   * enviado pelo usuário atual, mais recente primeiro, com o status —
+   * fechado por padrão pra não ocupar espaço; clicar no cabeçalho
+   * expande/recolhe. */
+  function renderMyRequests() {
+    if (myCorrections.length === 0) {
+      punchEditRequests.innerHTML = "";
+      return;
+    }
+    punchEditRequests.innerHTML = `
+      <button type="button" class="punch-edit-requests-toggle" id="punch-edit-requests-toggle" aria-expanded="${myRequestsExpanded}">
+        <svg class="punch-edit-requests-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        <span>Minhas solicitações (${myCorrections.length})</span>
+      </button>
+      <div class="ponto-corrections-list"${myRequestsExpanded ? "" : " hidden"}>
+        ${myCorrections
+          .map(
+            (c) => `
+          <div class="ponto-correction-row${c.status === "pendente" ? " pending" : ""}">
+            <div class="ponto-correction-head">
+              <span class="ponto-correction-when">${formatDateTime(c.createdAt)}</span>
+              <span class="ponto-correction-status ${c.status}">${CORRECTION_STATUS_LABELS[c.status]}</span>
+            </div>
+            <div class="ponto-correction-change">${escapeHtml(`${ACTION_LABELS[c.action]} ${formatCorrectionChange(c)}`)}</div>
+            <div class="ponto-correction-text">"${escapeHtml(c.justification)}"</div>
+          </div>`
+          )
+          .join("")}
+      </div>`;
+    document.getElementById("punch-edit-requests-toggle").addEventListener("click", () => {
+      myRequestsExpanded = !myRequestsExpanded;
+      renderMyRequests();
+    });
   }
 
-  async function savePunchRow(row, punch) {
+  /** Reloads pending state (per-punch + "Minhas solicitações") after a
+   * request is submitted. Doesn't touch time_punches or the hour
+   * bank/summary — nothing actually changed there yet, only the admin
+   * approving does that. */
+  async function afterCorrectionSubmitted(message) {
+    punchEditInfo.textContent = message;
+    await loadMyCorrections();
+    await renderPunchEditList();
+    renderMyRequests();
+  }
+
+  async function requestPunchEdit(row, punch) {
     const type = row.querySelector(".punch-row-type").value;
     const time = row.querySelector(".punch-row-time").value;
     if (!time) {
@@ -787,44 +918,42 @@
     punchEditError.textContent = "";
     try {
       const punchedAt = combineDateAndTime(punchEditDateInput.value, time);
-      await updatePunch(punch.id, { type, punchedAt });
       await addCorrection({
         userId: currentUser.id,
+        punchId: punch.id,
         action: "editada",
         punchType: type,
         previousTime: punch.punchedAt,
         newTime: punchedAt,
         justification,
       });
-      await afterPunchEditChange();
+      punchEditJustification.value = "";
+      await afterCorrectionSubmitted("Pedido de edição enviado — aguardando aprovação do admin.");
     } catch (err) {
-      console.error("Falha ao salvar batida:", err);
-      punchEditError.textContent = "Não foi possível salvar essa batida.";
+      console.error("Falha ao enviar pedido de edição:", err);
+      punchEditError.textContent = "Não foi possível enviar o pedido.";
     }
   }
 
-  async function deletePunchRow(row, punch) {
+  async function requestPunchDelete(punch) {
     const justification = requireJustification();
     if (!justification) return;
-    // Um confirm() nativo é suficiente aqui — é uma correção pontual dentro
-    // de um modal que já exige justificativa escrita; não parece justificar
-    // mais um modal de confirmação aninhado igual ao de exclusão de usuário.
-    if (!confirm("Excluir essa batida? Essa ação não pode ser desfeita.")) return;
     punchEditError.textContent = "";
     try {
-      await deletePunch(punch.id);
       await addCorrection({
         userId: currentUser.id,
+        punchId: punch.id,
         action: "excluida",
         punchType: punch.type,
         previousTime: punch.punchedAt,
         newTime: null,
         justification,
       });
-      await afterPunchEditChange();
+      punchEditJustification.value = "";
+      await afterCorrectionSubmitted("Pedido de exclusão enviado — aguardando aprovação do admin.");
     } catch (err) {
-      console.error("Falha ao excluir batida:", err);
-      punchEditError.textContent = "Não foi possível excluir essa batida.";
+      console.error("Falha ao enviar pedido de exclusão:", err);
+      punchEditError.textContent = "Não foi possível enviar o pedido.";
     }
   }
 
@@ -842,9 +971,9 @@
     punchAddBtn.disabled = true;
     try {
       const punchedAt = combineDateAndTime(punchEditDateInput.value, time);
-      await registerPunch(currentUser.id, punchAddType.value, punchedAt);
       await addCorrection({
         userId: currentUser.id,
+        punchId: null,
         action: "adicionada",
         punchType: punchAddType.value,
         previousTime: null,
@@ -852,10 +981,11 @@
         justification,
       });
       punchAddTime.value = "";
-      await afterPunchEditChange();
+      punchEditJustification.value = "";
+      await afterCorrectionSubmitted("Pedido de adição enviado — aguardando aprovação do admin.");
     } catch (err) {
-      console.error("Falha ao adicionar batida:", err);
-      punchEditError.textContent = "Não foi possível adicionar essa batida.";
+      console.error("Falha ao enviar pedido de adição:", err);
+      punchEditError.textContent = "Não foi possível enviar o pedido.";
     } finally {
       punchAddBtn.disabled = false;
     }
@@ -865,45 +995,76 @@
     if (e.target === punchEditOverlay) closePunchEditModal();
   });
 
-  // --- ponto: justificativas recebidas (admin) — lista tudo que os
-  // colaboradores registraram ao corrigir o próprio ponto. ---
-  const ACTION_LABELS = { adicionada: "Adicionou", editada: "Editou", excluida: "Excluiu" };
+  // --- ponto: solicitações de correção (admin) — aprovar aplica a
+  // alteração em time_punches (a única hora em que uma correção de
+  // colaborador realmente muda o ponto dele); rejeitar só marca o status. ---
 
-  function formatCorrectionChange(c) {
-    const typeLabel = PUNCH_PAST_LABELS[c.punchType];
-    if (c.action === "adicionada") return `${typeLabel} às ${formatDateTime(c.newTime)}`;
-    if (c.action === "excluida") return `${typeLabel} que estava às ${formatDateTime(c.previousTime)}`;
-    return `${typeLabel}: ${formatDateTime(c.previousTime)} → ${formatDateTime(c.newTime)}`;
-  }
-
-  /** Renders every self-correction justification, most recent first. A
-   * no-op for non-admins — applyPermissions() keeps the panel hidden. */
+  /** Renders every correction request, pendentes first (oldest pendente
+   * first, so o admin resolve na ordem que chegaram), depois as já
+   * revisadas mais recentes primeiro. A no-op para quem não é admin —
+   * applyPermissions() mantém o painel escondido. */
   async function renderCorrectionsList() {
     if (!currentUser || !currentUser.isAdmin) return;
+    pontoCorrectionsError.textContent = "";
     pontoCorrectionsList.innerHTML = '<p class="empty">Carregando…</p>';
     try {
       const corrections = await getCorrections();
       if (corrections.length === 0) {
-        pontoCorrectionsList.innerHTML = '<p class="empty">Nenhuma justificativa enviada ainda.</p>';
+        pontoCorrectionsList.innerHTML = '<p class="empty">Nenhuma solicitação enviada ainda.</p>';
         return;
       }
+      const pending = corrections.filter((c) => c.status === "pendente").reverse(); // mais antiga primeiro
+      const resolved = corrections.filter((c) => c.status !== "pendente"); // já vem mais recente primeiro
       pontoCorrectionsList.innerHTML = "";
-      corrections.forEach((c) => {
+      [...pending, ...resolved].forEach((c) => {
         const user = users.find((u) => u.id === c.userId);
+        const isPending = c.status === "pendente";
         const row = document.createElement("div");
-        row.className = "ponto-correction-row";
+        row.className = "ponto-correction-row" + (isPending ? " pending" : "");
         row.innerHTML = `
           <div class="ponto-correction-head">
             <span class="ponto-correction-user">${escapeHtml(user ? user.name : "Ex-colaborador")}</span>
-            <span class="ponto-correction-when">${formatDateTime(c.createdAt)}</span>
+            <span class="ponto-correction-status ${c.status}">${CORRECTION_STATUS_LABELS[c.status]}</span>
           </div>
+          <div class="ponto-correction-when">${formatDateTime(c.createdAt)}</div>
           <div class="ponto-correction-change">${escapeHtml(`${ACTION_LABELS[c.action]} ${formatCorrectionChange(c)}`)}</div>
-          <div class="ponto-correction-text">"${escapeHtml(c.justification)}"</div>`;
+          <div class="ponto-correction-text">"${escapeHtml(c.justification)}"</div>
+          ${
+            isPending
+              ? `<div class="ponto-correction-actions">
+                   <button type="button" class="btn" data-action="approve">Aprovar</button>
+                   <button type="button" class="btn secondary" data-action="reject">Rejeitar</button>
+                 </div>`
+              : ""
+          }`;
+        if (isPending) {
+          row.querySelector('[data-action="approve"]').addEventListener("click", () => resolveCorrectionRow(c, "aprovada", row));
+          row.querySelector('[data-action="reject"]').addEventListener("click", () => resolveCorrectionRow(c, "rejeitada", row));
+        }
         pontoCorrectionsList.appendChild(row);
       });
     } catch (err) {
-      console.error("Falha ao carregar justificativas:", err);
-      pontoCorrectionsList.innerHTML = '<p class="empty">Não foi possível carregar as justificativas.</p>';
+      console.error("Falha ao carregar solicitações:", err);
+      pontoCorrectionsList.innerHTML = '<p class="empty">Não foi possível carregar as solicitações.</p>';
+    }
+  }
+
+  /** Approves (applies to time_punches) or rejects (just marks the status)
+   * one pending request, then reloads the list — and, if it changes
+   * something for whoever's currently looking at their own Ponto summary,
+   * that only reflects it next time they open the page (this is the admin
+   * acting, not them). */
+  async function resolveCorrectionRow(correction, status, row) {
+    const buttons = row.querySelectorAll(".ponto-correction-actions .btn");
+    buttons.forEach((b) => (b.disabled = true));
+    try {
+      if (status === "aprovada") await approveCorrection(correction, currentUser.id);
+      else await rejectCorrection(correction.id, currentUser.id);
+      await renderCorrectionsList();
+    } catch (err) {
+      console.error("Falha ao revisar solicitação:", err);
+      buttons.forEach((b) => (b.disabled = false));
+      pontoCorrectionsError.textContent = "Não foi possível salvar essa decisão. Tente de novo.";
     }
   }
 

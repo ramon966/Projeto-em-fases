@@ -8,7 +8,7 @@
      sem isso, uma edição no styles.css pode continuar em cache mesmo
      depois de um refresh normal. Incremente esse número toda vez que
      styles.css mudar. -->
-<link rel="stylesheet" href="assets/css/styles.css?v=6" />
+<link rel="stylesheet" href="assets/css/styles.css?v=12" />
 </head>
 <body>
 
@@ -209,7 +209,7 @@
 
           <button type="button" class="btn secondary ponto-correct-btn" id="ponto-correct-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
-            Corrigir ponto
+            Solicitar correção
           </button>
         </div>
 
@@ -228,7 +228,9 @@
           </div>
 
           <div class="ponto-card">
-            <span class="ponto-admin-title">Justificativas recebidas</span>
+            <span class="ponto-admin-title">Solicitações de correção</span>
+            <p class="picker-hint">Pendentes primeiro — aprovar aplica a alteração no ponto do colaborador; rejeitar só descarta o pedido.</p>
+            <p class="error-msg" id="ponto-corrections-error"></p>
             <div class="ponto-corrections-list" id="ponto-corrections-list"></div>
           </div>
         </div>
@@ -264,12 +266,6 @@
             <button type="button" class="cal-view-btn" data-cal-view="day">Dia</button>
             <button type="button" class="cal-view-btn cal-today-btn" id="cal-today-btn">Hoje</button>
           </div>
-        </div>
-
-        <div class="cal-legend">
-          <span class="cal-legend-item"><span class="cal-dot feriado"></span>Feriado</span>
-          <span class="cal-legend-item"><span class="cal-dot recesso"></span>Recesso</span>
-          <span class="cal-legend-item"><span class="cal-dot aniversario"></span>Aniversário</span>
         </div>
 
         <div class="cal-body" id="cal-body"></div>
@@ -346,6 +342,23 @@
   </div>
 </div>
 
+<!-- modal: confirmar bater o ponto (evita registrar por engano) -->
+<div class="modal-overlay" id="punch-confirm-overlay" hidden>
+  <div class="modal-panel confirm-panel">
+    <div class="modal-head">
+      <span class="modal-title">Bater ponto</span>
+    </div>
+    <span class="confirm-icon-chip neutral">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </span>
+    <p class="confirm-message" id="punch-confirm-message"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn secondary" id="punch-confirm-cancel">Cancelar</button>
+      <button type="button" class="btn" id="punch-confirm-ok">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <!-- modal: configurar horário de trabalho de um colaborador (admin) -->
 <div class="modal-overlay" id="schedule-overlay" hidden>
   <div class="modal-panel">
@@ -376,13 +389,18 @@
   </div>
 </div>
 
-<!-- modal: corrigir o próprio ponto (adicionar/editar/excluir batidas de um
-     dia) — exige justificativa, que fica visível para o admin. -->
+<!-- modal: solicitar correção do próprio ponto (adicionar/editar/excluir
+     batidas de um dia) — exige justificativa. Nada aqui muda o ponto na
+     hora: vira um pedido pendente até o admin aprovar ou rejeitar. -->
 <div class="modal-overlay" id="punch-edit-overlay" hidden>
   <div class="modal-panel punch-edit-panel">
     <div class="modal-head">
-      <span class="modal-title">Corrigir meu ponto</span>
+      <span class="modal-title">Solicitar correção de ponto</span>
     </div>
+    <p class="picker-hint">
+      Suas alterações não são aplicadas na hora — cada uma vira um pedido
+      pendente até o admin aprovar ou rejeitar.
+    </p>
 
     <div class="field">
       <label for="punch-edit-date">Dia</label>
@@ -401,7 +419,7 @@
       <input id="punch-add-time" type="time" />
       <button type="button" class="btn secondary" id="punch-add-btn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-        Adicionar
+        Solicitar adição
       </button>
     </div>
 
@@ -411,6 +429,10 @@
     </div>
 
     <p class="error-msg" id="punch-edit-error"></p>
+    <p class="success-msg" id="punch-edit-info"></p>
+
+    <div class="punch-edit-requests" id="punch-edit-requests"></div>
+
     <div class="modal-actions">
       <button type="button" class="btn" id="punch-edit-close">Concluído</button>
     </div>
@@ -484,11 +506,11 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="assets/js/supabase-client.js"></script>
-<script src="assets/js/users-store.js"></script>
-<script src="assets/js/calendar-data.js"></script>
-<script src="assets/js/ponto-store.js"></script>
-<script src="assets/js/theme.js"></script>
-<script src="assets/js/app.js"></script>
+<script src="assets/js/supabase-client.js?v=1"></script>
+<script src="assets/js/users-store.js?v=1"></script>
+<script src="assets/js/calendar-data.js?v=1"></script>
+<script src="assets/js/ponto-store.js?v=3"></script>
+<script src="assets/js/theme.js?v=1"></script>
+<script src="assets/js/app.js?v=3"></script>
 </body>
 </html>

@@ -144,31 +144,80 @@ window.PontoStore = (function () {
     return {
       id: row.id,
       userId: row.user_id,
+      punchId: row.punch_id,
       action: row.action,
       punchType: row.punch_type,
       previousTime: row.previous_time,
       newTime: row.new_time,
       justification: row.justification,
+      // Fallback pro banco ainda não ter rodado a migração em
+      // supabase/schema_ponto_corrections.sql (coluna `status` inexistente
+      // ainda vem undefined do Supabase) — trata como 'pendente', o mesmo
+      // default que a coluna teria assim que a migração rodar.
+      status: row.status || "pendente",
+      reviewedAt: row.reviewed_at,
+      reviewedBy: row.reviewed_by,
       createdAt: row.created_at,
     };
   }
 
-  /** Logs a self-correction made by a non-admin employee, with the
-   * justification the admin will review. Admin corrections (via the
-   * monthly spreadsheet) don't go through here — they don't require one. */
-  async function addCorrection({ userId, action, punchType, previousTime, newTime, justification }) {
-    const { error } = await db()
-      .from(CORRECTIONS_TABLE)
-      .insert({ user_id: userId, action, punch_type: punchType, previous_time: previousTime, new_time: newTime, justification });
+  /** Submits a correction *request* from a non-admin employee — nothing in
+   * time_punches changes yet. It sits as 'pendente' until an admin approves
+   * (applyCorrection actually touches time_punches then) or rejects it (see
+   * below). Admin corrections (via the monthly spreadsheet) don't go
+   * through here — they don't require approval. */
+  async function addCorrection({ userId, punchId, action, punchType, previousTime, newTime, justification }) {
+    const { error } = await db().from(CORRECTIONS_TABLE).insert({
+      user_id: userId,
+      punch_id: punchId || null,
+      action,
+      punch_type: punchType,
+      previous_time: previousTime,
+      new_time: newTime,
+      justification,
+    });
     if (error) throw error;
   }
 
-  /** All correction justifications, most recent first — feeds the admin's
-   * "Justificativas recebidas" panel. */
-  async function getCorrections() {
-    const { data, error } = await db().from(CORRECTIONS_TABLE).select("*").order("created_at", { ascending: false });
+  /** Correction requests, most recent first. Feeds the admin's
+   * "Solicitações de correção" panel when called with no userId (every
+   * request, any status), and the collaborator's own "minhas
+   * solicitações" list when called with one (just their own). */
+  async function getCorrections(userId) {
+    let query = db().from(CORRECTIONS_TABLE).select("*").order("created_at", { ascending: false });
+    if (userId) query = query.eq("user_id", userId);
+    const { data, error } = await query;
     if (error) throw error;
     return data.map(mapCorrection);
+  }
+
+  async function markCorrectionReviewed(id, status, adminId) {
+    const { error } = await db()
+      .from(CORRECTIONS_TABLE)
+      .update({ status, reviewed_at: new Date().toISOString(), reviewed_by: adminId })
+      .eq("id", id);
+    if (error) throw error;
+  }
+
+  /** Approves a pending request: actually applies it to time_punches (the
+   * one moment a collaborator's correction takes effect), then marks the
+   * request 'aprovada'. If the time_punches write fails, the request stays
+   * 'pendente' — nothing is marked reviewed on a failed apply. */
+  async function approveCorrection(correction, adminId) {
+    if (correction.action === "adicionada") {
+      await registerPunch(correction.userId, correction.punchType, correction.newTime);
+    } else if (correction.action === "editada") {
+      await updatePunch(correction.punchId, { type: correction.punchType, punchedAt: correction.newTime });
+    } else if (correction.action === "excluida") {
+      await deletePunch(correction.punchId);
+    }
+    await markCorrectionReviewed(correction.id, "aprovada", adminId);
+  }
+
+  /** Rejects a pending request — only marks the status, time_punches is
+   * never touched. */
+  async function rejectCorrection(id, adminId) {
+    await markCorrectionReviewed(id, "rejeitada", adminId);
   }
 
   function dateOnlyStr(d) {
@@ -208,10 +257,13 @@ window.PontoStore = (function () {
     return window.CalendarData.BIRTHDAYS.slice().sort((a, b) => a.month - b.month || a.day - b.day);
   }
 
-  /** What the *next* punch should be, given the last one registered. Starts
-   * a fresh "entrada" if there's no last punch, or if the last one was on a
-   * previous day (a day that ended without a "saida" doesn't trap the next
-   * one in the old cycle). */
+  /** What the *next* punch should be, given the last one registered — or
+   * null if today's 4-punch cycle (entrada → saída almoço → volta almoço →
+   * saída) is already complete, meaning no more punches are allowed until
+   * tomorrow (a forgotten/wrong punch goes through a correction request
+   * instead, not a 5th punch). Starts a fresh "entrada" if there's no last
+   * punch, or if the last one was on a previous day (a day that ended
+   * without a "saida" doesn't trap the next one in the old cycle). */
   function nextPunchType(lastPunch) {
     if (!lastPunch) return PUNCH_CYCLE[0];
     const last = new Date(lastPunch.punchedAt);
@@ -222,7 +274,8 @@ window.PontoStore = (function () {
       last.getDate() === now.getDate();
     if (!sameDay) return PUNCH_CYCLE[0];
     const idx = PUNCH_CYCLE.indexOf(lastPunch.type);
-    return PUNCH_CYCLE[(idx + 1) % PUNCH_CYCLE.length];
+    if (idx === PUNCH_CYCLE.length - 1) return null;
+    return PUNCH_CYCLE[idx + 1];
   }
 
   /** Registers a punch of the given type. Defaults to "now" (the punch
@@ -318,6 +371,8 @@ window.PontoStore = (function () {
     deletePunch,
     addCorrection,
     getCorrections,
+    approveCorrection,
+    rejectCorrection,
     getHolidaysInRange,
     getHolidaysForYear,
     getBirthdays,

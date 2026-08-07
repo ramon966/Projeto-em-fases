@@ -67,11 +67,14 @@ os únicos lugares que sabem que os dados vêm do Supabase. Se um dia
 trocar de provedor de banco ou ganhar um backend próprio, só esses
 arquivos precisam mudar — o resto da UI (`app.js`) não muda.
 
-**Cache do CSS:** `index.html` carrega `styles.css?v=2` — esse `?v=`
-existe só pra forçar o navegador a buscar o arquivo de novo a cada
-mudança (sem isso, uma edição no CSS pode continuar em cache mesmo
-depois de um refresh normal). **Toda vez que mexer em `styles.css`,
-incremente esse número** (`?v=3`, `?v=4`, ...).
+**Cache do CSS/JS:** `index.html` carrega `styles.css` e cada `assets/js/*.js`
+com um `?v=N` — esse `?v=` existe só pra forçar o navegador a buscar o
+arquivo de novo a cada mudança (sem isso, uma edição pode continuar em
+cache mesmo depois de um refresh normal, e o navegador roda código
+velho sem avisar — inclusive assumindo comportamento que já não é o do
+código atual). **Toda vez que mexer num desses arquivos, incremente o
+`?v=` só dele** (`?v=3`, `?v=4`, ...); não precisa mexer no dos que não
+mudaram.
 
 ## Como rodar localmente
 
@@ -145,20 +148,28 @@ gestão (escala + planilha + justificativas), descrito abaixo.
 
 **Correção de ponto**, com regras diferentes por cargo:
 
-- **Colaborador comum** só corrige o **próprio** ponto, pelo botão
-  "Corrigir ponto": um modal de um dia específico, com todas as
-  batidas daquele dia (adicionar uma esquecida, editar tipo/horário de
-  uma errada, excluir uma duplicada). É **obrigatório escrever uma
-  justificativa** antes de salvar qualquer alteração — ela fica
-  registrada com o nome do colaborador e some para o admin em
-  "Justificativas recebidas".
-- **Admin** corrige o ponto de **qualquer** colaborador direto pelo
-  ícone de relógio na lista de colaboradores, mas numa **planilha do
-  mês inteiro** (estilo Excel): uma linha por dia do mês corrente,
-  seguindo o calendário real (28 a 31 dias, conforme o mês/ano — o
-  mesmo calendário usado no Brasil), com os 4 horários do dia editáveis
-  lado a lado e total/esperado/diferença calculados na hora. Dá pra
-  navegar entre meses. Correção de admin não exige justificativa.
+- **Colaborador comum** não corrige o próprio ponto diretamente — ele
+  **solicita**, pelo botão "Solicitar correção": um modal de um dia
+  específico, com todas as batidas daquele dia (pedir a adição de uma
+  esquecida, a edição de tipo/horário de uma errada, ou a exclusão de
+  uma duplicada). É **obrigatório escrever uma justificativa** antes de
+  enviar qualquer pedido. Nada em `time_punches` muda nesse momento —
+  o pedido fica pendente (uma batida com pedido em aberto mostra
+  "Pendente" em vez dos botões, pra não pedir a mesma coisa duas
+  vezes) e some pro colaborador em "Minhas solicitações", dentro do
+  próprio modal, com o status atualizado.
+- **Admin** decide cada pedido no painel "Solicitações de correção"
+  (pendentes primeiro): **Aprovar** aplica a alteração de fato em
+  `time_punches` (é o único momento em que uma correção de colaborador
+  muda o ponto dele); **Rejeitar** só marca o pedido como recusado, sem
+  tocar em nada. Além disso, o admin corrige o ponto de **qualquer**
+  colaborador diretamente (sem passar por aprovação) pelo ícone de
+  relógio na lista de colaboradores, numa **planilha do mês inteiro**
+  (estilo Excel): uma linha por dia do mês corrente, seguindo o
+  calendário real (28 a 31 dias, conforme o mês/ano — o mesmo
+  calendário usado no Brasil), com os 4 horários do dia editáveis lado
+  a lado e total/esperado/diferença calculados na hora. Dá pra navegar
+  entre meses.
 
 **Ver pontos** (botão ao lado de "Horário e correção..."): abre um
 modal com o ponto de **todos os colaboradores ao mesmo tempo**, mês
@@ -223,7 +234,8 @@ Para deixar de ser um protótipo e virar um produto vendável, falta:
 - [ ] Apertar as policies de RLS depois que houver autenticação (hoje a `anon key` tem acesso total)
 - [ ] Validação de e-mail único e regras de permissão reforçadas no servidor
 - [x] Correção manual de ponto (adicionar/editar/excluir batidas)
-- [x] Justificativa obrigatória quando um colaborador corrige o próprio ponto
+- [x] Justificativa obrigatória ao solicitar uma correção
+- [x] Correção de colaborador vira solicitação pendente — só aplica em `time_punches` quando o admin aprova
 - [x] Calendário de feriados/recesso, com exclusão automática do cálculo de horas
 - [x] Aniversários da equipe no Calendário (informativo, não afeta cálculo de horas)
 - [ ] Feriado municipal de Goiânia (se houver um específico) — não incluído por falta de certeza da data
