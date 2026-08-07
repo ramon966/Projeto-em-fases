@@ -283,6 +283,7 @@
     if (!punchEditOverlay.hidden) closePunchEditModal();
     if (!punchSheetOverlay.hidden) closePunchSheetModal();
     if (!usersHistoryOverlay.hidden) closeUsersHistoryModal();
+    if (!myHistoryOverlay.hidden) closeMyHistoryModal();
   });
 
   mSave.addEventListener("click", async () => {
@@ -346,6 +347,7 @@
     // card and the admin stack are always mutually exclusive.
     document.getElementById("ponto-personal-card").hidden = isAdmin;
     document.getElementById("ponto-admin-stack").hidden = !isAdmin;
+    document.getElementById("ponto-my-history-btn").hidden = isAdmin;
     renderTopbarUser();
   }
 
@@ -1360,6 +1362,99 @@
   usersHistoryCloseBtn.addEventListener("click", closeUsersHistoryModal);
   usersHistoryOverlay.addEventListener("click", (e) => {
     if (e.target === usersHistoryOverlay) closeUsersHistoryModal();
+  });
+
+  // --- ponto: meus pontos do mês corrente (colaborador) — versão só
+  // leitura do punch-sheet acima: sem inputs, sem navegação de mês (sempre
+  // o atual) e sempre o próprio usuário logado. Corrigir algo continua
+  // exigindo justificativa via "Solicitar correção" — aqui é só consulta. ---
+  const myHistoryBtn = document.getElementById("ponto-my-history-btn");
+  const myHistoryOverlay = document.getElementById("my-history-overlay");
+  const myHistoryTitle = document.getElementById("my-history-title");
+  const myHistoryBody = document.getElementById("my-history-body");
+  const myHistoryError = document.getElementById("my-history-error");
+  const myHistoryCloseBtn = document.getElementById("my-history-close");
+
+  function openMyHistoryModal() {
+    if (!currentUser) return;
+    myHistoryError.textContent = "";
+    myHistoryOverlay.hidden = false;
+    renderMyHistory();
+  }
+  function closeMyHistoryModal() {
+    myHistoryOverlay.hidden = true;
+  }
+
+  async function renderMyHistory() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-based
+    myHistoryTitle.textContent = `Meus pontos — ${MONTH_NAMES[month]} de ${year}`;
+    myHistoryError.textContent = "";
+    myHistoryBody.innerHTML = '<tr><td colspan="8" class="empty">Carregando…</td></tr>';
+    try {
+      const monthStart = new Date(year, month, 1);
+      const monthEnd = new Date(year, month + 1, 1); // exclusivo
+      const totalDays = new Date(year, month + 1, 0).getDate();
+
+      const [schedule, punches, holidays] = await Promise.all([
+        getSchedule(currentUser.id),
+        getPunchesForRange(currentUser.id, monthStart, monthEnd),
+        getHolidaysInRange(monthStart, monthEnd),
+      ]);
+      const holidayByDate = {};
+      holidays.forEach((h) => {
+        holidayByDate[h.date] = h;
+      });
+
+      const byDay = {};
+      punches.forEach((p) => {
+        const d = new Date(p.punchedAt);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        if (!byDay[key]) byDay[key] = {};
+        if (!byDay[key][p.type]) byDay[key][p.type] = p;
+      });
+
+      myHistoryBody.innerHTML = "";
+      const today = new Date();
+      for (let day = 1; day <= totalDays; day++) {
+        const date = new Date(year, month, day);
+        const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const dayPunches = byDay[key] || {};
+        const holiday = holidayByDate[key];
+        const iso = date.getDay() === 0 ? 7 : date.getDay();
+        const isWorkingDay = schedule.weekdays.includes(iso) && !holiday;
+        const worked = sumWorkedMinutes(
+          Object.values(dayPunches).sort((a, b) => new Date(a.punchedAt) - new Date(b.punchedAt))
+        );
+        const expected = isWorkingDay ? Math.round(schedule.hoursPerDay * 60) : 0;
+        const diff = worked - expected;
+        const isToday = date.toDateString() === today.toDateString();
+
+        const row = document.createElement("tr");
+        row.className =
+          "punch-sheet-row" + (isWorkingDay ? "" : " off-day") + (isToday ? " today" : "") + (holiday ? " holiday" : "");
+        row.innerHTML = `
+          <td class="punch-sheet-day"${holiday ? ` title="${escapeHtml(holiday.name)}"` : ""}>${WEEKDAY_SHORT[date.getDay()]} ${String(day).padStart(2, "0")}${holiday ? " 🔸" : ""}</td>
+          ${PUNCH_TYPES.map(
+            (type) => `<td>${dayPunches[type] ? toTimeInputValue(dayPunches[type].punchedAt) : "—"}</td>`
+          ).join("")}
+          <td class="punch-sheet-total">${formatMinutes(worked)}</td>
+          <td class="punch-sheet-expected">${isWorkingDay ? formatMinutes(expected) : "—"}</td>
+          <td class="punch-sheet-diff ${diff >= 0 ? "positive" : "negative"}">${isWorkingDay ? (diff >= 0 ? "+" : "") + formatMinutes(diff) : "—"}</td>
+        `;
+        myHistoryBody.appendChild(row);
+      }
+    } catch (err) {
+      console.error("Falha ao carregar meus pontos do mês:", err);
+      myHistoryBody.innerHTML = '<tr><td colspan="8" class="empty">Não foi possível carregar.</td></tr>';
+    }
+  }
+
+  myHistoryBtn.addEventListener("click", openMyHistoryModal);
+  myHistoryCloseBtn.addEventListener("click", closeMyHistoryModal);
+  myHistoryOverlay.addEventListener("click", (e) => {
+    if (e.target === myHistoryOverlay) closeMyHistoryModal();
   });
 
   // --- calendário: grade mensal/semanal/diária com feriados, recesso e

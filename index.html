@@ -188,6 +188,12 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </span>
         <span class="picker-title">Ponto</span>
+        <!-- Só pra colaborador (não-admin) — escondido em applyPermissions()
+             igual ao ponto-personal-card, já que admin não bate ponto. -->
+        <button type="button" class="btn secondary ponto-my-history-btn" id="ponto-my-history-btn" title="Ver meus pontos do mês">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/></svg>
+          Ver meus pontos do mês
+        </button>
       </div>
 
       <div class="ponto-layout">
@@ -516,6 +522,42 @@
     <p class="error-msg" id="users-history-error"></p>
     <div class="modal-actions">
       <button type="button" class="btn" id="users-history-close">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal: meus pontos do mês corrente (colaborador) — só leitura, só os
+     pontos do próprio usuário logado, sempre o mês atual (sem navegação).
+     Mesma grade visual do punch-sheet do admin, sem os inputs de edição —
+     pra corrigir algo, o colaborador usa "Solicitar correção" (exige
+     justificativa e aprovação do admin), não edita direto aqui. -->
+<div class="modal-overlay" id="my-history-overlay" hidden>
+  <div class="modal-panel punch-sheet-panel">
+    <div class="modal-head">
+      <span class="modal-title" id="my-history-title">Meus pontos do mês</span>
+    </div>
+
+    <div class="punch-sheet-scroll">
+      <table class="punch-sheet-table">
+        <thead>
+          <tr>
+            <th>Dia</th>
+            <th>Entrada</th>
+            <th>Saída almoço</th>
+            <th>Volta almoço</th>
+            <th>Saída</th>
+            <th>Total</th>
+            <th>Esperado</th>
+            <th>Diferença</th>
+          </tr>
+        </thead>
+        <tbody id="my-history-body"></tbody>
+      </table>
+    </div>
+
+    <p class="error-msg" id="my-history-error"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="my-history-close">Fechar</button>
     </div>
   </div>
 </div>
